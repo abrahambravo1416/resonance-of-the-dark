@@ -11,12 +11,14 @@ config_version=5
 [application]
 
 config/name="Resonance of the dark"
+run/main_scene="res://scenes/Level_01.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+LevelManager="*res://scripts/LevelManager.gd"
 
 [display]
 

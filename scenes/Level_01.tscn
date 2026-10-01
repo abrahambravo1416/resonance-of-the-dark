@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://bsk5obwfmfilg"]
+
+[ext_resource type="Script" uid="uid://ct2f02wxibn4t" path="res://scripts/Player.gd" id="1_os0vb"]
+[ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
+[ext_resource type="Script" uid="uid://56mdnjrdeemm" path="res://scripts/LevelBuilder.gd" id="3_builder"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3h0py"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jgy4n"]
+
+[node name="Level_01" type="Node3D" unique_id=513129815]
+script = ExtResource("3_builder")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1398787996 node_paths=PackedStringArray("camera", "interaction_ray")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("1_os0vb")
+camera = NodePath("Camera3D")
+interaction_ray = NodePath("Camera3D/RayCast3D")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=337277063]
+shape = SubResource("CapsuleShape3D_3h0py")
+
+[node name="Camera3D" type="Camera3D" parent="Player" unique_id=1468345836]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+
+[node name="RayCast3D" type="RayCast3D" parent="Player/Camera3D" unique_id=632005517]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0004505813, 0)
+target_position = Vector3(0, 0, -10)
+
+[node name="Enemy" type="CharacterBody3D" parent="." unique_id=963199558]
+script = ExtResource("2_tkx3x")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemy" unique_id=1573094753]
+shape = SubResource("CapsuleShape3D_jgy4n")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="Enemy" unique_id=2023775287]
+
+[node name="RayCast3D" type="RayCast3D" parent="Enemy" unique_id=848804895]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.26564026, 0)
+target_position = Vector3(0, 0, -10)
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=1606646690]
