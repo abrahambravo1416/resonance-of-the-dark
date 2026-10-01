@@ -3,6 +3,8 @@ class_name PlayerController
 
 signal noise_emitted(world_position: Vector3, level: float)
 signal item_collected(item_name: String, collected: int, required: int)
+signal health_changed(current_health: int, max_health: int)
+signal player_died
 
 @export_group("References")
 @export var camera: Camera3D
@@ -24,20 +26,29 @@ signal item_collected(item_name: String, collected: int, required: int)
 @export_group("Inventory")
 @export_range(0, 100, 1) var total_items_needed: int = 4
 
+@export_group("Health")
+@export var max_health: int = 4
+@export var current_health: int = 4
+@export_range(1.0, 60.0, 0.5) var regeneration_delay: float = 10.0
+
 var is_hidden: bool = false
 var is_running: bool = false
 var is_crouching: bool = false
 var noise_level: float = 0.0
 var items_collected: int = 0
 var controls_frozen: bool = false
+var is_dead: bool = false
 
 var _noise_timer: float = 0.0
 var _pitch: float = 0.0
 var _standing_camera_height: float = 0.55
+var _regeneration_timer: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("player")
+	max_health = maxi(1, max_health)
+	current_health = clampi(current_health, 0, max_health)
 	_ensure_input_actions()
 	_configure_collision_shape()
 	if camera == null:
@@ -52,6 +63,42 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if get_node_or_null("/root/LevelManager") != null:
 		LevelManager.register_player(self)
+	if current_health <= 0:
+		_die()
+
+
+func _process(delta: float) -> void:
+	if is_dead or current_health >= max_health:
+		_regeneration_timer = 0.0
+		return
+	_regeneration_timer -= delta
+	if _regeneration_timer <= 0.0:
+		current_health = mini(current_health + 1, max_health)
+		health_changed.emit(current_health, max_health)
+		_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
+
+
+func take_damage(amount: int = 1) -> void:
+	if is_dead or amount <= 0:
+		return
+	var previous_health := current_health
+	current_health = maxi(0, current_health - amount)
+	if current_health == previous_health:
+		return
+	_regeneration_timer = regeneration_delay
+	health_changed.emit(current_health, max_health)
+	if current_health <= 0:
+		_die()
+
+
+func _die() -> void:
+	if is_dead:
+		return
+	is_dead = true
+	freeze_controls()
+	get_tree().paused = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	player_died.emit()
 
 
 func _unhandled_input(event: InputEvent) -> void:

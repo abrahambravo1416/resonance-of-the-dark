@@ -3,6 +3,9 @@
 [ext_resource type="Script" uid="uid://ct2f02wxibn4t" path="res://scripts/Player.gd" id="1_os0vb"]
 [ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
 [ext_resource type="Script" uid="uid://56mdnjrdeemm" path="res://scripts/LevelBuilder.gd" id="3_builder"]
+[ext_resource type="Script" path="res://scripts/PauseMenu.gd" id="4_pause_menu"]
+[ext_resource type="Script" path="res://scripts/HealthHUD.gd" id="5_health_hud"]
+[ext_resource type="Script" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3h0py"]
 
@@ -40,3 +43,17 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.26564026, 0)
 target_position = Vector3(0, 0, -10)
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=1606646690]
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+process_mode = 3
+layer = 10
+script = ExtResource("4_pause_menu")
+
+[node name="HealthHUD" type="CanvasLayer" parent="."]
+layer = 5
+script = ExtResource("5_health_hud")
+
+[node name="GameOverMenu" type="CanvasLayer" parent="."]
+process_mode = 3
+layer = 11
+script = ExtResource("6_game_over")

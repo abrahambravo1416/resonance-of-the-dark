@@ -14,6 +14,7 @@ enum State { PATROL, INVESTIGATE, CHASE }
 @export var view_distance: float = 14.0
 @export_range(1.0, 180.0, 1.0) var view_angle_degrees: float = 100.0
 @export var attack_range: float = 1.4
+@export_range(1.5, 5.0, 0.1) var attack_cooldown: float = 1.8
 @export var noise_threshold: float = 0.55
 @export var lose_player_after: float = 3.0
 @export var noise_memory_seconds: float = 1.25
@@ -39,6 +40,7 @@ var _last_noise_position: Vector3
 var _noise_memory_timer: float = 0.0
 var _lost_player_timer: float = 0.0
 var _caught: bool = false
+var _attack_cooldown_remaining: float = 0.0
 var _patrol_started: bool = false
 var _safe_velocity: Vector3 = Vector3.ZERO
 var _has_safe_velocity: bool = false
@@ -134,10 +136,16 @@ func _physics_process(delta: float) -> void:
 		player = get_tree().get_first_node_in_group("player") as CharacterBody3D
 		if player == null:
 			return
+	if bool(player.get("is_dead")):
+		_stop_horizontal()
+		return
 
+	_attack_cooldown_remaining = maxf(0.0, _attack_cooldown_remaining - delta)
 	_noise_memory_timer = maxf(0.0, _noise_memory_timer - delta)
 	if global_position.distance_to(player.global_position) <= attack_range:
-		_catch_player()
+		_stop_horizontal()
+		if _attack_cooldown_remaining <= 0.0:
+			_attack_player()
 		return
 
 	var can_see_player := _can_see_player()
@@ -328,12 +336,8 @@ func _on_player_noise_emitted(world_position: Vector3, level: float) -> void:
 		_set_target(_last_noise_position)
 
 
-func _catch_player() -> void:
-	if _caught:
+func _attack_player() -> void:
+	if player == null or not is_instance_valid(player) or not player.has_method("take_damage"):
 		return
-	_caught = true
-	if player.has_method("freeze_controls"):
-		player.freeze_controls()
-	player_caught.emit(player)
-	if get_node_or_null("/root/LevelManager") != null:
-		LevelManager.restart_current_level()
+	_attack_cooldown_remaining = attack_cooldown
+	player.take_damage(1)

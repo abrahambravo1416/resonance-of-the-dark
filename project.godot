@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Resonance of the dark"
-run/main_scene="res://scenes/Level_01.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
@@ -24,6 +24,10 @@ LevelManager="*res://scripts/LevelManager.gd"
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
+
+[editor]
+
+import/use_multiple_threads=false
 
 [editor_plugins]
 
