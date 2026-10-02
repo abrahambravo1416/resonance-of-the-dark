@@ -7,7 +7,7 @@ class_name LevelBuilder
 @export_group("Generation")
 @export var auto_build_on_ready: bool = true
 @export var grid_size: Vector2i = Vector2i(30, 30)
-@export_range(1, 2, 1) var level_number: int = 1
+@export_range(1, 3, 1) var level_number: int = 1
 @export_range(1.0, 20.0, 0.25) var cell_size: float = 3.0
 @export_range(0.0, 0.8, 0.05) var obstacle_density: float = 0.3
 @export_range(0.0, 1.0, 0.05) var decoration_density: float = 0.6
@@ -20,6 +20,8 @@ class_name LevelBuilder
 @export var obstacle_scenes: Array[PackedScene] = []
 @export var collectible_scenes: Array[PackedScene] = []
 @export var hiding_scenes: Array[PackedScene] = []
+@export var health_skull_scene: PackedScene
+@export var pumpkin_scene: PackedScene
 @export var collectible_count: int = 4
 @export var hiding_zone_count: int = 18
 
@@ -47,6 +49,8 @@ const FLOOR_DIRT_ASSET_PATH: String = "res://assets/halloween/gltf/floor_dirt.gl
 const RITUAL_ALTAR_ASSET_PATH: String = "res://assets/halloween/gltf/shrine_candles.gltf"
 const EXIT_GATE_ASSET_PATH: String = "res://assets/halloween/gltf/arch_gate.gltf"
 const HALLOWEEN_GLTF_PATH: String = "res://assets/halloween/gltf"
+const HEALTH_SKULL_COUNT: int = 3
+const HEALTH_SKULL_RESPAWN_INTERVAL: float = 30.0
 const ENEMY_MODEL_KEYWORDS: Array[String] = ["enemy", "skeleton", "ghost", "zombie", "monster", "creature", "undead"]
 const DECORATION_KEYWORDS: Array[String] = [
 	"gravestone", "gravemarker", "grave_", "tree_", "fence", "candle", "lantern", "bone_", "ribcage", "ribs", "skeleton", "skull",
@@ -91,6 +95,8 @@ var patrol_points_root: Node3D
 var player: CharacterBody3D
 var enemy: CharacterBody3D
 var enemies: Array[CharacterBody3D] = []
+var active_skulls: Array = []
+var active_pumpkins: Array = []
 var _patrol_markers: Array[Node3D] = []
 var _halloween_scenes: Array[PackedScene] = []
 var _decoration_scenes: Array[PackedScene] = []
@@ -106,6 +112,8 @@ var _exit_gate_is_open: bool = false
 var _navigation_bake_pending: bool = false
 var _enemy_count: int = 2
 var _ritual_altar_count: int = 2
+var _health_skull_respawn_timer: Timer
+var _health_skull_respawns_remaining: int = 0
 
 
 func _ready() -> void:
@@ -126,6 +134,11 @@ func build_map() -> void:
 	_clear_children(environment_root)
 	_clear_children(hiding_zones_root)
 	_clear_children(items_root)
+	active_skulls.clear()
+	active_pumpkins.clear()
+	_health_skull_respawns_remaining = 0
+	if _health_skull_respawn_timer != null:
+		_health_skull_respawn_timer.stop()
 	_clear_children(ritual_altars_root)
 	ritual_shrines.clear()
 	_clear_children(exit_gate_root)
@@ -145,23 +158,34 @@ func build_map() -> void:
 	spawn_ritual_altars()
 	spawn_hiding_zones()
 	_spawn_open_graves()
-	spawn_collectibles()
+	if level_number < 3:
+		spawn_collectibles()
+	if level_number >= 2:
+		spawn_health_skulls()
+	if level_number == 3:
+		spawn_pumpkins()
 	_spawn_passage_decorations()
 	generate_patrol_points()
 	if bake_navigation_after_build:
 		bake_navigation()
 	else:
 		_activate_enemy_navigation()
+	if level_number >= 2 and player != null and player.has_method("show_level_intro"):
+		player.call("show_level_intro", level_number)
 
 
 func _apply_level_profile() -> void:
-	level_number = clampi(level_number, 1, 2)
+	level_number = clampi(level_number, 1, 3)
 	if level_number == 1:
 		grid_size = Vector2i(15, 15)
 		_enemy_count = 2
 		_ritual_altar_count = 2
-	else:
+	elif level_number == 2:
 		grid_size = Vector2i(30, 30)
+		_enemy_count = 3
+		_ritual_altar_count = 4
+	else:
+		grid_size = Vector2i(35, 35)
 		_enemy_count = 3
 		_ritual_altar_count = 4
 
@@ -296,6 +320,16 @@ func _resolve_level_nodes() -> void:
 	environment_root = _ensure_container(navigation_region, "Environment")
 	hiding_zones_root = _ensure_container(navigation_region, "HidingZones")
 	items_root = _ensure_container(navigation_region, "Items")
+	_health_skull_respawn_timer = get_node_or_null("HealthSkullRespawnTimer") as Timer
+	if _health_skull_respawn_timer == null:
+		_health_skull_respawn_timer = Timer.new()
+		_health_skull_respawn_timer.name = "HealthSkullRespawnTimer"
+		_health_skull_respawn_timer.one_shot = true
+		_health_skull_respawn_timer.wait_time = HEALTH_SKULL_RESPAWN_INTERVAL
+		add_child(_health_skull_respawn_timer)
+	var respawn_callback := Callable(self, "_on_health_skull_respawn_timeout")
+	if not _health_skull_respawn_timer.timeout.is_connected(respawn_callback):
+		_health_skull_respawn_timer.timeout.connect(respawn_callback)
 	ritual_altars_root = _ensure_container(self, "RitualAltars")
 	exit_gate_root = _ensure_container(self, "ExitGate")
 	patrol_points_root = _ensure_container(self, "PatrolPoints")
@@ -1055,6 +1089,133 @@ func spawn_collectibles() -> void:
 			_add_fallback_collectible_visual(item, item.item_type)
 	if player != null and player.get("total_items_needed") != null:
 		player.set("total_items_needed", count)
+
+
+func spawn_health_skulls() -> void:
+	if level_number < 2:
+		return
+	if items_root == null:
+		_resolve_level_nodes()
+	for index in HEALTH_SKULL_COUNT:
+		if not _spawn_health_skull():
+			push_warning("No fue posible colocar los 3 cráneos de salud: no hay suficientes celdas transitables.")
+			return
+
+
+func _spawn_health_skull() -> bool:
+	var candidates: Array[Vector2i] = _free_cells.duplicate()
+	if candidates.is_empty():
+		return false
+	var cell: Vector2i = candidates[_rng.randi_range(0, candidates.size() - 1)]
+	_free_cells.erase(cell)
+	var skull_scene := health_skull_scene
+	if skull_scene == null:
+		skull_scene = load("res://scenes/HealthSkull.tscn") as PackedScene
+	if skull_scene == null:
+		_free_cells.append(cell)
+		push_warning("No se pudo cargar scenes/HealthSkull.tscn.")
+		return false
+	var skull := skull_scene.instantiate() as Area3D
+	if skull == null:
+		_free_cells.append(cell)
+		return false
+	skull.name = "HealthSkull_%02d" % (active_skulls.size() + 1)
+	skull.position = _cell_to_world(cell)
+	skull.set_meta("cell", cell)
+	skull.body_entered.connect(_on_health_skull_body_entered.bind(skull))
+	items_root.add_child(skull)
+	active_skulls.append(skull)
+	return true
+
+
+func _on_health_skull_body_entered(body: Node3D, skull: Area3D) -> void:
+	if not is_instance_valid(skull) or not is_instance_valid(body):
+		return
+	if body != player and not body.is_in_group("player"):
+		return
+	if body.get("current_health") == null or body.get("max_health") == null:
+		return
+	if int(body.get("current_health")) >= int(body.get("max_health")):
+		return
+	if body.has_method("heal"):
+		body.call("heal", 1)
+	if active_skulls.has(skull):
+		active_skulls.erase(skull)
+		var cell_variant: Variant = skull.get_meta("cell", null)
+		if cell_variant is Vector2i and not _free_cells.has(cell_variant):
+			_free_cells.append(cell_variant)
+	skull.queue_free()
+	if active_skulls.is_empty() and _health_skull_respawns_remaining == 0:
+		_health_skull_respawns_remaining = HEALTH_SKULL_COUNT
+		_health_skull_respawn_timer.start(HEALTH_SKULL_RESPAWN_INTERVAL)
+
+
+func _on_health_skull_respawn_timeout() -> void:
+	if level_number < 2 or _health_skull_respawns_remaining <= 0:
+		return
+	if _spawn_health_skull():
+		_health_skull_respawns_remaining -= 1
+	if _health_skull_respawns_remaining > 0:
+		_health_skull_respawn_timer.start(HEALTH_SKULL_RESPAWN_INTERVAL)
+
+
+func get_active_skulls() -> Array:
+	return active_skulls
+
+
+func spawn_pumpkins() -> void:
+	if level_number != 3:
+		return
+	var scene_to_spawn := pumpkin_scene
+	if scene_to_spawn == null:
+		scene_to_spawn = load("res://scenes/Pumpkin.tscn") as PackedScene
+	if scene_to_spawn == null:
+		push_error("No se pudo cargar scenes/Pumpkin.tscn.")
+		return
+	for index in range(7):
+		var candidates: Array[Vector2i] = _free_cells.duplicate()
+		if candidates.is_empty():
+			push_warning("No hay suficientes celdas transitables para colocar las 7 calabazas.")
+			return
+		var cell: Vector2i = candidates[_rng.randi_range(0, candidates.size() - 1)]
+		_free_cells.erase(cell)
+		var pumpkin := scene_to_spawn.instantiate() as Area3D
+		if pumpkin == null:
+			_free_cells.append(cell)
+			continue
+		pumpkin.name = "Pumpkin_%02d" % (index + 1)
+		pumpkin.position = _cell_to_world(cell)
+		pumpkin.rotation.y = _rng.randf_range(0.0, TAU)
+		pumpkin.set_meta("cell", cell)
+		items_root.add_child(pumpkin)
+		active_pumpkins.append(pumpkin)
+
+
+func try_collect_nearby_pumpkin(collector: Node3D) -> bool:
+	if level_number != 3 or collector == null:
+		return false
+	for pumpkin in active_pumpkins.duplicate():
+		if not is_instance_valid(pumpkin) or not (pumpkin is Node3D):
+			active_pumpkins.erase(pumpkin)
+			continue
+		var pumpkin_node := pumpkin as Node3D
+		var offset: Vector3 = pumpkin_node.global_position - collector.global_position
+		offset.y = 0.0
+		if offset.length_squared() >= 4.0:
+			continue
+		active_pumpkins.erase(pumpkin)
+		var cell_variant: Variant = pumpkin_node.get_meta("cell", null)
+		if cell_variant is Vector2i and not _free_cells.has(cell_variant):
+			_free_cells.append(cell_variant)
+		pumpkin_node.queue_free()
+		if collector.has_method("collect_pumpkin"):
+			collector.call("collect_pumpkin")
+		return true
+	return false
+
+
+func get_active_pumpkins() -> Array:
+	return active_pumpkins
 
 
 func spawn_ritual_altars() -> void:

@@ -10,6 +10,8 @@ signal cemetery_exit_unlocked
 
 const ALTAR_MARKER_COLOR_HEX: String = "#FFAA00"
 const EXIT_GATE_MARKER_COLOR_HEX: String = "#00FF66"
+const PUMPKIN_MARKER_COLOR_HEX: String = "#FF8800"
+const PUMPKINS_REQUIRED: int = 7
 
 @export_group("References")
 @export var camera: Camera3D
@@ -68,6 +70,7 @@ var is_crouching: bool = false
 var noise_level: float = 0.0
 var items_collected: int = 0
 var rituals_completed: int = 0
+var pumpkins_collected: int = 0
 var total_rituals_required: int = 4
 var current_level_number: int = 1
 var ritual_shrines: Array[RitualAltar] = []
@@ -96,6 +99,8 @@ var _radar_arrow_area: Control
 var _radar_circle: Panel
 var _radar_arrow: Label
 var _radar_enemy_arrows: Array[Label] = []
+var _radar_skull_markers: Dictionary = {}
+var _radar_pumpkin_markers: Dictionary = {}
 var _radar_exit_gate_marker: Label
 var _radar_center_glow: Panel
 var _radar_center_dot: Panel
@@ -111,6 +116,9 @@ var _radar_alert_flash_time: float = 0.0
 var _interaction_prompt: Label
 var _ritual_counter_label: Label
 var _ritual_mission_label: RichTextLabel
+var _pumpkin_counter_label: RichTextLabel
+var _pumpkin_lock_message: Label
+var _pumpkin_lock_timer: Timer
 var _exit_gate_nearby: bool = false
 var _has_escaped: bool = false
 var _victory_screen_layer: CanvasLayer
@@ -118,6 +126,9 @@ var _damage_flash_layer: CanvasLayer
 var _damage_flash_rect: ColorRect
 var _damage_flash_tween: Tween
 var _camera_shake_tween: Tween
+var _level_2_intro_layer: CanvasLayer
+var _level_2_intro_timer: Timer
+var _level_2_intro_countdown: int = 5
 
 
 func _ready() -> void:
@@ -414,6 +425,8 @@ func _update_threat_radar(delta: float) -> void:
 	_update_exit_gate_radar_marker()
 	var radar_size: Vector2 = _radar_arrow_area.size
 	var radar_center: Vector2 = radar_size * 0.5
+	_update_health_skull_radar_markers(radar_center)
+	_update_pumpkin_radar_markers(radar_center)
 	var closest_distance: float = INF
 	for arrow_index in _radar_enemy_arrows.size():
 		var arrow: Label = _radar_enemy_arrows[arrow_index]
@@ -448,6 +461,112 @@ func _update_threat_radar(delta: float) -> void:
 	_radar_distance_label.text = "LEJANÍA DEL ENEMIGO: %s" % distance_text
 
 
+func _update_health_skull_radar_markers(radar_center: Vector2) -> void:
+	if current_level_number < 2:
+		for marker in _radar_skull_markers.values():
+			if is_instance_valid(marker):
+				marker.queue_free()
+		_radar_skull_markers.clear()
+		return
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("get_active_skulls"):
+		return
+	var active_skulls: Array = level_builder.call("get_active_skulls")
+	var live_ids: Dictionary = {}
+	for skull in active_skulls:
+		if not is_instance_valid(skull) or not (skull is Node3D):
+			continue
+		var skull_node := skull as Node3D
+		var marker_id: int = skull_node.get_instance_id()
+		live_ids[marker_id] = true
+		var marker := _radar_skull_markers.get(marker_id) as Label
+		if marker == null or not is_instance_valid(marker):
+			marker = Label.new()
+			marker.name = "HealthSkullMarker_%d" % marker_id
+			marker.text = "■"
+			marker.size = Vector2(14.0, 14.0)
+			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			marker.add_theme_font_size_override("font_size", 14)
+			marker.add_theme_color_override("font_color", Color(0.2, 0.6, 1.0))
+			marker.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.2, 1.0))
+			marker.add_theme_constant_override("outline_size", 2)
+			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_radar_arrow_area.add_child(marker)
+			_radar_skull_markers[marker_id] = marker
+		var toward_skull: Vector3 = skull_node.global_position - global_position
+		toward_skull.y = 0.0
+		if toward_skull.length_squared() < 0.0001:
+			marker.visible = false
+			continue
+		var angle: float = _radar_relative_angle(skull_node.global_position)
+		var radar_radius: float = clampf(toward_skull.length() / 30.0 * 50.0, 10.0, 50.0)
+		var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
+		marker.position = marker_center - marker.size * 0.5
+		marker.modulate.a = 0.82 + 0.18 * (0.5 + 0.5 * sin(_radar_flash_time * 8.0 + float(marker_id % 10)))
+		marker.visible = true
+	for marker_id in _radar_skull_markers.keys().duplicate():
+		if live_ids.has(marker_id):
+			continue
+		var stale_marker := _radar_skull_markers[marker_id] as Label
+		if is_instance_valid(stale_marker):
+			stale_marker.queue_free()
+		_radar_skull_markers.erase(marker_id)
+
+
+func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
+	if current_level_number != 3:
+		for marker in _radar_pumpkin_markers.values():
+			if is_instance_valid(marker):
+				marker.queue_free()
+		_radar_pumpkin_markers.clear()
+		return
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("get_active_pumpkins"):
+		return
+	var active_pumpkins: Array = level_builder.call("get_active_pumpkins")
+	var live_ids: Dictionary = {}
+	for pumpkin in active_pumpkins:
+		if not is_instance_valid(pumpkin) or not (pumpkin is Node3D):
+			continue
+		var pumpkin_node := pumpkin as Node3D
+		var marker_id: int = pumpkin_node.get_instance_id()
+		live_ids[marker_id] = true
+		var marker := _radar_pumpkin_markers.get(marker_id) as Label
+		if marker == null or not is_instance_valid(marker):
+			marker = Label.new()
+			marker.name = "PumpkinMarker_%d" % marker_id
+			marker.text = "●"
+			marker.size = Vector2(14.0, 14.0)
+			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			marker.add_theme_font_size_override("font_size", 14)
+			marker.add_theme_color_override("font_color", Color(1.0, 0.5, 0.0))
+			marker.add_theme_color_override("font_outline_color", Color(0.12, 0.035, 0.0, 1.0))
+			marker.add_theme_constant_override("outline_size", 2)
+			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_radar_arrow_area.add_child(marker)
+			_radar_pumpkin_markers[marker_id] = marker
+		var toward_pumpkin: Vector3 = pumpkin_node.global_position - global_position
+		toward_pumpkin.y = 0.0
+		if toward_pumpkin.length_squared() < 0.0001:
+			marker.visible = false
+			continue
+		var angle: float = _radar_relative_angle(pumpkin_node.global_position)
+		var radar_radius: float = clampf(toward_pumpkin.length() / 35.0 * 50.0, 10.0, 50.0)
+		var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
+		marker.position = marker_center - marker.size * 0.5
+		marker.modulate.a = 0.88 + 0.12 * (0.5 + 0.5 * sin(_radar_flash_time * 7.0 + float(marker_id % 10)))
+		marker.visible = true
+	for marker_id in _radar_pumpkin_markers.keys().duplicate():
+		if live_ids.has(marker_id):
+			continue
+		var stale_marker := _radar_pumpkin_markers[marker_id] as Label
+		if is_instance_valid(stale_marker):
+			stale_marker.queue_free()
+		_radar_pumpkin_markers.erase(marker_id)
+
+
 func set_ritual_shrines(altars: Array[RitualAltar]) -> void:
 	ritual_shrines.clear()
 	for altar in altars:
@@ -458,11 +577,123 @@ func set_ritual_shrines(altars: Array[RitualAltar]) -> void:
 
 
 func configure_level(level_number: int, ritual_count: int) -> void:
-	current_level_number = clampi(level_number, 1, 2)
+	current_level_number = clampi(level_number, 1, 3)
 	total_rituals_required = maxi(1, ritual_count)
 	rituals_completed = 0
+	pumpkins_collected = 0
 	exit_unlocked = false
+	if _pumpkin_counter_label != null:
+		_pumpkin_counter_label.visible = current_level_number == 3
+	if current_level_number == 3:
+		_pumpkin_counter_label.offset_top = 18.0
+		_pumpkin_counter_label.offset_bottom = 50.0
+		_ritual_counter_label.offset_top = 54.0
+		_ritual_counter_label.offset_bottom = 88.0
+		_ritual_mission_label.offset_top = 88.0
+		_ritual_mission_label.offset_bottom = 116.0
+	else:
+		_ritual_counter_label.offset_top = 24.0
+		_ritual_counter_label.offset_bottom = 60.0
+		_ritual_mission_label.offset_top = 60.0
+		_ritual_mission_label.offset_bottom = 88.0
 	_update_ritual_counter_ui()
+
+
+func show_level_intro(level_number: int) -> void:
+	if current_level_number != level_number or level_number < 2 or _level_2_intro_layer != null:
+		return
+	get_tree().paused = true
+	set_meta("level_2_intro_active", true)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_level_2_intro_countdown = 5
+	_level_2_intro_layer = CanvasLayer.new()
+	_level_2_intro_layer.name = "Level2IntroLayer"
+	_level_2_intro_layer.layer = 40
+	_level_2_intro_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_level_2_intro_layer)
+
+	var backdrop := ColorRect.new()
+	backdrop.name = "Backdrop"
+	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	backdrop.color = Color(0.015, 0.01, 0.03, 0.88)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+	backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
+	_level_2_intro_layer.add_child(backdrop)
+
+	var panel := PanelContainer.new()
+	panel.name = "Level2Announcement"
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -390.0
+	panel.offset_top = -230.0
+	panel.offset_right = 390.0
+	panel.offset_bottom = 230.0
+	panel.process_mode = Node.PROCESS_MODE_ALWAYS
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.035, 0.025, 0.06, 0.99)
+	panel_style.border_color = Color(0.24, 0.58, 0.95, 0.95)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(10)
+	panel_style.content_margin_left = 30.0
+	panel_style.content_margin_right = 30.0
+	panel_style.content_margin_top = 26.0
+	panel_style.content_margin_bottom = 26.0
+	panel.add_theme_stylebox_override("panel", panel_style)
+	_level_2_intro_layer.add_child(panel)
+
+	var layout := VBoxContainer.new()
+	layout.alignment = BoxContainer.ALIGNMENT_CENTER
+	layout.add_theme_constant_override("separation", 18)
+	layout.process_mode = Node.PROCESS_MODE_ALWAYS
+	panel.add_child(layout)
+
+	var title := Label.new()
+	title.text = "¡NIVEL 2: LA PESADILLA EXTENDIDA!" if level_number == 2 else "¡NIVEL 3: EL RITUAL FINAL!"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	title.add_theme_font_size_override("font_size", 25)
+	title.add_theme_color_override("font_color", Color(0.65, 0.82, 1.0))
+	layout.add_child(title)
+
+	var instructions := Label.new()
+	if level_number == 2:
+		instructions.text = "NUEVA MECÁNICA: CRÁNEOS DE SALUD\n• Encuentra los cráneos en el suelo para recuperar 1 bloque de vida.\n• En el radar aparecerán marcados como un CUADRADO AZUL (■).\n• Si recoges los 3 cráneos, reaparecerán uno a uno cada 30 segundos."
+	else:
+		instructions.text = "MECÁNICA PRINCIPAL: LAS 7 CALABAZAS\n• Debes encontrar y recoger las 7 calabazas (● en el radar) usando la tecla 'E'.\n• Los altares permanecerán bloqueados hasta que reúnas todas las calabazas.\n• Recoge cráneos (■ azul) para curarte y mantente alerta de los 3 enemigos."
+	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instructions.add_theme_font_size_override("font_size", 17)
+	instructions.add_theme_color_override("font_color", Color(0.92, 0.89, 0.96))
+	layout.add_child(instructions)
+
+	var countdown := Label.new()
+	countdown.name = "Countdown"
+	countdown.text = "El juego comienza en: 5..."
+	countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	countdown.add_theme_font_size_override("font_size", 22)
+	countdown.add_theme_color_override("font_color", Color(1.0, 0.78, 0.36))
+	layout.add_child(countdown)
+
+	_level_2_intro_timer = Timer.new()
+	_level_2_intro_timer.name = "Level2IntroCountdownTimer"
+	_level_2_intro_timer.wait_time = 1.0
+	_level_2_intro_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_level_2_intro_layer.add_child(_level_2_intro_timer)
+	_level_2_intro_timer.timeout.connect(_on_level_2_intro_countdown)
+	_level_2_intro_timer.start()
+
+
+func _on_level_2_intro_countdown() -> void:
+	_level_2_intro_countdown -= 1
+	if _level_2_intro_countdown <= 0:
+		_level_2_intro_layer.queue_free()
+		_level_2_intro_layer = null
+		_level_2_intro_timer = null
+		set_meta("level_2_intro_active", false)
+		get_tree().paused = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		return
+	var countdown_label := get_node_or_null("Level2IntroLayer/Level2Announcement/VBoxContainer/Countdown") as Label
+	if countdown_label != null:
+		countdown_label.text = "El juego comienza en: %d..." % _level_2_intro_countdown
 
 
 func set_exit_gate_radar_target(target: Node3D, gate_is_open: bool = false) -> void:
@@ -605,6 +836,18 @@ func take_damage(amount: int = 1) -> void:
 		_die()
 
 
+func heal(amount: int) -> void:
+	if is_dead or amount <= 0:
+		return
+	current_health = mini(current_health + amount, max_health)
+	_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
+	update_health_ui()
+
+
+func update_health_ui() -> void:
+	health_changed.emit(current_health, max_health)
+
+
 func apply_knockback(impact_position: Vector3) -> void:
 	if is_dead:
 		return
@@ -688,10 +931,38 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ritual_interact"):
 		_try_light_nearby_altar()
 	if event.is_action_pressed("interact"):
+		if current_level_number == 3 and _try_collect_nearby_pumpkin():
+			return
 		if is_hiding:
 			_set_hiding(false, null, true)
 		else:
 			_interact_with_target()
+
+
+func _try_collect_nearby_pumpkin() -> bool:
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("try_collect_nearby_pumpkin"):
+		return false
+	return bool(level_builder.call("try_collect_nearby_pumpkin", self))
+
+
+func collect_pumpkin() -> void:
+	if current_level_number != 3 or pumpkins_collected >= PUMPKINS_REQUIRED:
+		return
+	pumpkins_collected += 1
+	_update_ritual_counter_ui()
+
+
+func _show_pumpkin_lock_message() -> void:
+	if _pumpkin_lock_message == null or _pumpkin_lock_timer == null:
+		return
+	_pumpkin_lock_message.visible = true
+	_pumpkin_lock_timer.start()
+
+
+func _hide_pumpkin_lock_message() -> void:
+	if _pumpkin_lock_message != null:
+		_pumpkin_lock_message.visible = false
 
 
 func _physics_process(delta: float) -> void:
@@ -840,6 +1111,26 @@ func _create_interaction_prompt() -> void:
 func _create_ritual_ui() -> void:
 	if _radar_layer == null:
 		return
+	_pumpkin_counter_label = RichTextLabel.new()
+	_pumpkin_counter_label.name = "PumpkinCounter"
+	_pumpkin_counter_label.bbcode_enabled = true
+	_pumpkin_counter_label.scroll_active = false
+	_pumpkin_counter_label.fit_content = false
+	_pumpkin_counter_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_pumpkin_counter_label.offset_left = -720.0
+	_pumpkin_counter_label.offset_right = -28.0
+	_pumpkin_counter_label.offset_top = 18.0
+	_pumpkin_counter_label.offset_bottom = 50.0
+	_pumpkin_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_pumpkin_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_pumpkin_counter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pumpkin_counter_label.add_theme_font_size_override("normal_font_size", 17)
+	_pumpkin_counter_label.add_theme_color_override("default_color", Color(1.0, 0.82, 0.62, 1.0))
+	_pumpkin_counter_label.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
+	_pumpkin_counter_label.add_theme_constant_override("outline_size", 4)
+	_pumpkin_counter_label.visible = false
+	_radar_layer.add_child(_pumpkin_counter_label)
+
 	_ritual_counter_label = Label.new()
 	_ritual_counter_label.name = "RitualCounter"
 	_ritual_counter_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -879,6 +1170,31 @@ func _create_ritual_ui() -> void:
 	_ritual_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
 	_ritual_mission_label.add_theme_constant_override("outline_size", 4)
 	_radar_layer.add_child(_ritual_mission_label)
+	_pumpkin_lock_message = Label.new()
+	_pumpkin_lock_message.name = "PumpkinLockMessage"
+	_pumpkin_lock_message.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_pumpkin_lock_message.anchor_left = 0.5
+	_pumpkin_lock_message.anchor_right = 0.5
+	_pumpkin_lock_message.offset_left = -430.0
+	_pumpkin_lock_message.offset_right = 430.0
+	_pumpkin_lock_message.offset_top = 132.0
+	_pumpkin_lock_message.offset_bottom = 174.0
+	_pumpkin_lock_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pumpkin_lock_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_pumpkin_lock_message.text = "¡Debes recolectar las 7 calabazas antes de realizar los rituales!"
+	_pumpkin_lock_message.add_theme_font_size_override("font_size", 18)
+	_pumpkin_lock_message.add_theme_color_override("font_color", Color(1.0, 0.72, 0.42, 1.0))
+	_pumpkin_lock_message.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
+	_pumpkin_lock_message.add_theme_constant_override("outline_size", 5)
+	_pumpkin_lock_message.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pumpkin_lock_message.visible = false
+	_radar_layer.add_child(_pumpkin_lock_message)
+	_pumpkin_lock_timer = Timer.new()
+	_pumpkin_lock_timer.name = "PumpkinLockMessageTimer"
+	_pumpkin_lock_timer.one_shot = true
+	_pumpkin_lock_timer.wait_time = 2.5
+	_pumpkin_lock_timer.timeout.connect(_hide_pumpkin_lock_message)
+	_radar_layer.add_child(_pumpkin_lock_timer)
 	_update_ritual_counter_ui()
 
 
@@ -939,7 +1255,12 @@ func _get_nearby_ritual_altar() -> RitualAltar:
 
 func _try_light_nearby_altar() -> void:
 	var altar := _get_nearby_ritual_altar()
-	if altar == null or not altar.activate():
+	if altar == null:
+		return
+	if current_level_number == 3 and pumpkins_collected < PUMPKINS_REQUIRED:
+		_show_pumpkin_lock_message()
+		return
+	if not altar.activate():
 		return
 	rituals_completed = mini(rituals_completed + 1, total_rituals_required)
 	ritual_progress_changed.emit(rituals_completed, total_rituals_required)
@@ -952,6 +1273,9 @@ func _try_light_nearby_altar() -> void:
 
 
 func _update_ritual_counter_ui() -> void:
+	if _pumpkin_counter_label != null:
+		_pumpkin_counter_label.visible = current_level_number == 3
+		_pumpkin_counter_label.text = "Calabazas recolectadas: %d / %d ([color=%s]●[/color])" % [pumpkins_collected, PUMPKINS_REQUIRED, PUMPKIN_MARKER_COLOR_HEX]
 	if _ritual_counter_label != null:
 		if exit_unlocked:
 			_ritual_counter_label.text = "PORTÓN PRINCIPAL ABIERTO, ESCAPA!!!"
@@ -960,6 +1284,8 @@ func _update_ritual_counter_ui() -> void:
 	if _ritual_mission_label != null:
 		if exit_unlocked and rituals_completed >= total_rituals_required:
 			_ritual_mission_label.text = "- Sigue el ([color=%s]■[/color]) para salir" % EXIT_GATE_MARKER_COLOR_HEX
+		elif current_level_number == 3 and pumpkins_collected < PUMPKINS_REQUIRED:
+			_ritual_mission_label.text = "- Reúne las 7 calabazas para desbloquear los altares"
 		else:
 			_ritual_mission_label.text = "- Enciende los altares ([color=%s]◆[/color])" % ALTAR_MARKER_COLOR_HEX
 
@@ -983,7 +1309,7 @@ func escape_cemetery() -> void:
 	for enemy_node in get_tree().get_nodes_in_group("enemy"):
 		if enemy_node.has_method("freeze_for_escape"):
 			enemy_node.call("freeze_for_escape")
-	if current_level_number == 1:
+	if current_level_number < 3:
 		_show_level_complete_screen()
 	else:
 		_show_final_victory_screen()
@@ -991,8 +1317,8 @@ func escape_cemetery() -> void:
 
 func _show_level_complete_screen() -> void:
 	_show_escape_screen(
-		"¡NIVEL 1 COMPLETADO!",
-		"Sobreviviste a la primera noche...",
+		"¡NIVEL %d COMPLETADO!" % current_level_number,
+		"Sobreviviste a esta noche...",
 		true
 	)
 
@@ -1080,8 +1406,8 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	layout.add_child(description)
 
 	if show_continue:
-		var continue_button := _make_escape_button("CONTINUAR AL NIVEL 2", true)
-		continue_button.pressed.connect(_continue_to_level_2)
+		var continue_button := _make_escape_button("CONTINUAR AL NIVEL %d" % (current_level_number + 1), true)
+		continue_button.pressed.connect(_continue_to_next_level)
 		layout.add_child(continue_button)
 	var menu_button := _make_escape_button("MENÚ PRINCIPAL", not show_continue)
 	menu_button.pressed.connect(_return_to_main_menu)
@@ -1110,11 +1436,12 @@ func _make_escape_button(button_text: String, highlighted: bool) -> Button:
 	return button
 
 
-func _continue_to_level_2() -> void:
+func _continue_to_next_level() -> void:
 	get_tree().paused = false
-	var error := get_tree().change_scene_to_file("res://scenes/Level_02.tscn")
+	var next_level_path := "res://scenes/Level_%02d.tscn" % (current_level_number + 1)
+	var error := get_tree().change_scene_to_file(next_level_path)
 	if error != OK:
-		push_error("No se pudo cargar el Nivel 2 (error %d)." % error)
+		push_error("No se pudo cargar el Nivel %d (error %d)." % [current_level_number + 1, error])
 
 
 func _return_to_main_menu() -> void:

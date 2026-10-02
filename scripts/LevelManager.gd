@@ -6,6 +6,7 @@ signal restart_started
 const LEVEL_SCENE_PATHS: Array[String] = [
 	"res://scenes/Level_01.tscn",
 	"res://scenes/Level_02.tscn",
+	"res://scenes/Level_03.tscn",
 ]
 
 @export var restart_delay: float = 1.0

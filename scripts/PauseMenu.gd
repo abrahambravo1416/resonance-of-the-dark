@@ -16,6 +16,8 @@ func _input(event: InputEvent) -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player != null and bool(player.get("is_dead")):
 		return
+	if player != null and bool(player.get_meta("level_2_intro_active", false)):
+		return
 	if not event.is_echo() and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause_game")):
 		_toggle_pause()
 		get_viewport().set_input_as_handled()

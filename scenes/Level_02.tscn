@@ -1,4 +1,4 @@
-[gd_scene format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" uid="uid://ct2f02wxibn4t" path="res://scripts/Player.gd" id="1_os0vb"]
 [ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
@@ -6,6 +6,7 @@
 [ext_resource type="Script" uid="uid://iyxf53tehwsq" path="res://scripts/PauseMenu.gd" id="4_pause_menu"]
 [ext_resource type="Script" uid="uid://bp8gxl73x2mkf" path="res://scripts/HealthHUD.gd" id="5_health_hud"]
 [ext_resource type="Script" uid="uid://xx1wgpux0f5v" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
+[ext_resource type="PackedScene" path="res://scenes/HealthSkull.tscn" id="7_health_skull"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3h0py"]
 
@@ -15,6 +16,7 @@
 script = ExtResource("3_builder")
 level_number = 2
 grid_size = Vector2i(30, 30)
+health_skull_scene = ExtResource("7_health_skull")
 
 [node name="Player" type="CharacterBody3D" parent="." unique_id=1398787996 node_paths=PackedStringArray("camera", "interaction_ray")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
