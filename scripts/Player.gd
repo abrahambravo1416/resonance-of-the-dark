@@ -12,6 +12,13 @@ const ALTAR_MARKER_COLOR_HEX: String = "#FFAA00"
 const EXIT_GATE_MARKER_COLOR_HEX: String = "#00FF66"
 const PUMPKIN_MARKER_COLOR_HEX: String = "#FF8800"
 const PUMPKINS_REQUIRED: int = 7
+const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
+const SFX_HIDE: AudioStreamWAV = preload("res://audio/Efectos cortos/esconder_salir_escondite.wav")
+const SFX_PUMPKIN: AudioStreamWAV = preload("res://audio/Efectos cortos/recoger_calabazas.wav")
+const SFX_ENEMY_HIT: AudioStreamWAV = preload("res://audio/Efectos cortos/golpeo_de_enemigo.wav")
+const SFX_EXIT_UNLOCK: AudioStreamWAV = preload("res://audio/Efectos cortos/desbloquear_salida.wav")
+const SFX_LOSE: AudioStreamWAV = preload("res://audio/Efectos cortos/lose.wav")
+const SFX_WALK: AudioStreamWAV = preload("res://audio/Efectos cortos/caminar.wav")
 
 @export_group("References")
 @export var camera: Camera3D
@@ -126,6 +133,7 @@ var _damage_flash_layer: CanvasLayer
 var _damage_flash_rect: ColorRect
 var _damage_flash_tween: Tween
 var _camera_shake_tween: Tween
+var walk_audio_player: AudioStreamPlayer
 var _level_2_intro_layer: CanvasLayer
 var _level_2_intro_timer: Timer
 var _level_2_intro_countdown: int = 5
@@ -145,6 +153,7 @@ func _ready() -> void:
 	_create_threat_radar()
 	_create_ritual_ui()
 	_create_damage_feedback_ui()
+	_create_footstep_player()
 	_refresh_radar_enemies()
 	if interaction_ray == null and camera != null:
 		interaction_ray = camera.get_node_or_null("InteractionRay") as RayCast3D
@@ -820,6 +829,28 @@ func _update_radar_alert_state(delta: float) -> void:
 		_radar_alert_settings.font_color = Color(0.2, 0.9, 0.4)
 		_radar_alert_settings.shadow_color = Color(0.2, 0.9, 0.4, 0.58)
 		_radar_alert_label.modulate.a = 1.0
+	_update_pursuit_music(any_chasing)
+
+
+func _update_pursuit_music(is_chasing: bool) -> void:
+	var level_root := get_parent()
+	if level_root == null:
+		return
+	var level_music := level_root.get_node_or_null("LevelMusicPlayer") as AudioStreamPlayer
+	var pursuit_music := level_root.get_node_or_null("PursuitMusicPlayer") as AudioStreamPlayer
+	if pursuit_music == null:
+		return
+	if is_chasing:
+		if not pursuit_music.playing:
+			if level_music != null:
+				level_music.stream_paused = true
+			pursuit_music.play()
+	elif pursuit_music.playing:
+		pursuit_music.stop()
+		if level_music != null:
+			level_music.stream_paused = false
+	elif level_music != null and level_music.stream_paused:
+		level_music.stream_paused = false
 
 
 func take_damage(amount: int = 1) -> void:
@@ -831,6 +862,7 @@ func take_damage(amount: int = 1) -> void:
 		return
 	_regeneration_timer = regeneration_delay
 	health_changed.emit(current_health, max_health)
+	play_sound_effect(SFX_ENEMY_HIT)
 	_play_damage_feedback()
 	if current_health <= 0:
 		_die()
@@ -915,6 +947,7 @@ func _die() -> void:
 	if is_dead:
 		return
 	is_dead = true
+	play_sound_effect(SFX_LOSE, true)
 	freeze_controls()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -934,6 +967,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if current_level_number == 3 and _try_collect_nearby_pumpkin():
 			return
 		if is_hiding:
+			play_sound_effect(SFX_HIDE)
 			_set_hiding(false, null, true)
 		else:
 			_interact_with_target()
@@ -950,6 +984,7 @@ func collect_pumpkin() -> void:
 	if current_level_number != 3 or pumpkins_collected >= PUMPKINS_REQUIRED:
 		return
 	pumpkins_collected += 1
+	play_sound_effect(SFX_PUMPKIN)
 	_update_ritual_counter_ui()
 
 
@@ -967,9 +1002,11 @@ func _hide_pumpkin_lock_message() -> void:
 
 func _physics_process(delta: float) -> void:
 	if controls_frozen:
+		_update_footstep_audio(false)
 		velocity = Vector3.ZERO
 		return
 	if _cover_transition_active:
+		_update_footstep_audio(false)
 		velocity = Vector3.ZERO
 		return
 	_update_crouch_state(Input.is_action_pressed("crouch"))
@@ -978,12 +1015,14 @@ func _physics_process(delta: float) -> void:
 	if is_hiding:
 		if input_vector.length_squared() > 0.01:
 			_set_hiding(false, null, true)
+			_update_footstep_audio(false)
 			velocity = Vector3.ZERO
 			return
 		velocity.x = 0.0
 		velocity.z = 0.0
 		velocity.y = 0.0 if is_on_floor() else -gravity * delta
 		move_and_slide()
+		_update_footstep_audio(false)
 		_update_noise(delta, false)
 		return
 	var forward_strength := maxf(-input_vector.y, 0.0)
@@ -1009,7 +1048,44 @@ func _physics_process(delta: float) -> void:
 	else:
 		velocity.y -= gravity * delta
 	move_and_slide()
+	var horizontal_motion: bool = absf(velocity.x) > 0.01 or absf(velocity.z) > 0.01
+	var shift_pressed: bool = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
+	_update_footstep_audio(is_on_floor() and horizontal_motion and shift_pressed)
 	_update_noise(delta, input_vector.length_squared() > 0.0)
+
+
+func _create_footstep_player() -> void:
+	walk_audio_player = AudioStreamPlayer.new()
+	walk_audio_player.name = "FootstepAudioPlayer"
+	var walk_stream := SFX_WALK.duplicate() as AudioStreamWAV
+	if walk_stream != null:
+		walk_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	walk_audio_player.stream = walk_stream if walk_stream != null else SFX_WALK
+	walk_audio_player.volume_db = -8.0
+	walk_audio_player.process_mode = Node.PROCESS_MODE_INHERIT
+	add_child(walk_audio_player)
+
+
+func _update_footstep_audio(should_play: bool) -> void:
+	if walk_audio_player == null or not is_instance_valid(walk_audio_player):
+		return
+	if should_play:
+		if not walk_audio_player.playing:
+			walk_audio_player.play()
+	elif walk_audio_player.playing:
+		walk_audio_player.stop()
+
+
+func play_sound_effect(stream: AudioStream, process_always: bool = false) -> void:
+	if stream == null:
+		return
+	var audio_player := AudioStreamPlayer.new()
+	audio_player.stream = stream
+	audio_player.process_mode = Node.PROCESS_MODE_ALWAYS if process_always else Node.PROCESS_MODE_INHERIT
+	var audio_parent: Node = get_tree().root if process_always else self
+	audio_parent.add_child(audio_player)
+	audio_player.finished.connect(audio_player.queue_free)
+	audio_player.play()
 
 
 func _update_noise(delta: float, is_moving: bool) -> void:
@@ -1267,6 +1343,7 @@ func _try_light_nearby_altar() -> void:
 	_update_ritual_counter_ui()
 	noise_emitted.emit(altar.global_position, 1.0)
 	if rituals_completed >= total_rituals_required:
+		play_sound_effect(SFX_EXIT_UNLOCK)
 		exit_unlocked = true
 		_update_ritual_counter_ui()
 		cemetery_exit_unlocked.emit()
@@ -1420,6 +1497,7 @@ func _make_escape_button(button_text: String, highlighted: bool) -> Button:
 	var button := Button.new()
 	button.text = button_text
 	button.custom_minimum_size = Vector2(360.0, 52.0)
+	button.pressed.connect(_play_menu_click)
 	button.add_theme_font_size_override("font_size", 17)
 	button.add_theme_color_override("font_color", Color(0.98, 0.92, 0.82))
 	var normal := StyleBoxFlat.new()
@@ -1434,6 +1512,10 @@ func _make_escape_button(button_text: String, highlighted: bool) -> Button:
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", hover)
 	return button
+
+
+func _play_menu_click() -> void:
+	play_sound_effect(SFX_MENU_CLICK, true)
 
 
 func _continue_to_next_level() -> void:
@@ -1471,6 +1553,8 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 			is_hidden = _hidden_by_zone
 			_has_pre_hiding_transform = false
 			_update_crouch_state(is_crouching)
+		else:
+			play_sound_effect(SFX_HIDE)
 	else:
 		if not is_hiding:
 			return

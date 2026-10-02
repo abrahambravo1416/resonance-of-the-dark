@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://4j5r6pkgcjed"
+path="res://.godot/imported/curarse_con_craneos.wav-22060ff848c820603ce3a687daebc0e6.sample"
+
+[deps]
+
+source_file="res://audio/Efectos cortos/curarse_con_craneos.wav"
+dest_files=["res://.godot/imported/curarse_con_craneos.wav-22060ff848c820603ce3a687daebc0e6.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

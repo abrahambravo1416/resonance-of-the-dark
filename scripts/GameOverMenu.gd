@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 const MAIN_MENU_SCENE := "res://scenes/MainMenu.tscn"
+const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 
 var _overlay: Control
 var _player: Node
@@ -85,6 +86,7 @@ func _build_interface() -> void:
 func _make_button(label_text: String) -> Button:
 	var button := Button.new()
 	button.text = label_text
+	button.pressed.connect(_play_menu_click)
 	button.custom_minimum_size = Vector2(320.0, 52.0)
 	button.process_mode = Node.PROCESS_MODE_ALWAYS
 	button.focus_mode = Control.FOCUS_ALL
@@ -103,6 +105,15 @@ func _make_button(label_text: String) -> Button:
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", hover)
 	return button
+
+
+func _play_menu_click() -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = SFX_MENU_CLICK
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().root.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
 
 
 func _show_game_over() -> void:

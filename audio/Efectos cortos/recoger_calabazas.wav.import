@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://ucg3yaxexro4"
+path="res://.godot/imported/recoger_calabazas.wav-baf4f7e0c8f8915bf506634761a190b0.sample"
+
+[deps]
+
+source_file="res://audio/Efectos cortos/recoger_calabazas.wav"
+dest_files=["res://.godot/imported/recoger_calabazas.wav-baf4f7e0c8f8915bf506634761a190b0.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

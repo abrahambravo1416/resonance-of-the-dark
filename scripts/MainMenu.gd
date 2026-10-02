@@ -1,12 +1,19 @@
 extends Control
 
 const LEVEL_SCENE := "res://scenes/Level_01.tscn"
+const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 
 var _title: Label
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var music_player := get_node_or_null("MenuMusicPlayer") as AudioStreamPlayer
+	if music_player != null:
+		if music_player.stream is AudioStreamOggVorbis:
+			(music_player.stream as AudioStreamOggVorbis).loop = true
+		if not music_player.playing:
+			music_player.play()
 	_build_interface()
 	_animate_title()
 
@@ -94,6 +101,7 @@ func _build_interface() -> void:
 func _make_button(label_text: String, highlighted: bool) -> Button:
 	var button := Button.new()
 	button.text = label_text
+	button.pressed.connect(_play_menu_click)
 	button.custom_minimum_size = Vector2(280.0, 54.0)
 	button.focus_mode = Control.FOCUS_ALL
 	button.add_theme_font_size_override("font_size", 18)
@@ -114,6 +122,15 @@ func _make_button(label_text: String, highlighted: bool) -> Button:
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", hover)
 	return button
+
+
+func _play_menu_click() -> void:
+	var player := AudioStreamPlayer.new()
+	player.stream = SFX_MENU_CLICK
+	player.process_mode = Node.PROCESS_MODE_ALWAYS
+	get_tree().root.add_child(player)
+	player.finished.connect(player.queue_free)
+	player.play()
 
 
 func _animate_title() -> void:

@@ -51,6 +51,10 @@ const EXIT_GATE_ASSET_PATH: String = "res://assets/halloween/gltf/arch_gate.gltf
 const HALLOWEEN_GLTF_PATH: String = "res://assets/halloween/gltf"
 const HEALTH_SKULL_COUNT: int = 3
 const HEALTH_SKULL_RESPAWN_INTERVAL: float = 30.0
+const LEVEL_1_2_MUSIC_PATH: String = "res://audio/musica_de_nivel1y2.ogg"
+const LEVEL_3_MUSIC_PATH: String = "res://audio/musica_de_nivel3y4.ogg"
+const PURSUIT_MUSIC_PATH: String = "res://audio/musica_persecucion.ogg"
+const HEALTH_SKULL_PICKUP_SFX: AudioStreamWAV = preload("res://audio/Efectos cortos/curarse_con_craneos.wav")
 const ENEMY_MODEL_KEYWORDS: Array[String] = ["enemy", "skeleton", "ghost", "zombie", "monster", "creature", "undead"]
 const DECORATION_KEYWORDS: Array[String] = [
 	"gravestone", "gravemarker", "grave_", "tree_", "fence", "candle", "lantern", "bone_", "ribcage", "ribs", "skeleton", "skull",
@@ -95,6 +99,8 @@ var patrol_points_root: Node3D
 var player: CharacterBody3D
 var enemy: CharacterBody3D
 var enemies: Array[CharacterBody3D] = []
+var level_music_player: AudioStreamPlayer
+var pursuit_music_player: AudioStreamPlayer
 var active_skulls: Array = []
 var active_pumpkins: Array = []
 var _patrol_markers: Array[Node3D] = []
@@ -123,6 +129,7 @@ func _ready() -> void:
 
 func build_map() -> void:
 	_apply_level_profile()
+	_configure_level_music()
 	# Preserve enough map width for the clear spawn radius plus room around it.
 	var minimum_grid_extent: int = player_spawn_clear_radius * 2 + 3
 	grid_size.x = maxi(minimum_grid_extent, grid_size.x)
@@ -188,6 +195,48 @@ func _apply_level_profile() -> void:
 		grid_size = Vector2i(35, 35)
 		_enemy_count = 3
 		_ritual_altar_count = 4
+
+
+func _configure_level_music() -> void:
+	level_music_player = get_node_or_null("LevelMusicPlayer") as AudioStreamPlayer
+	if level_music_player == null:
+		level_music_player = AudioStreamPlayer.new()
+		level_music_player.name = "LevelMusicPlayer"
+		add_child(level_music_player)
+	var music_path: String = LEVEL_3_MUSIC_PATH if level_number == 3 else LEVEL_1_2_MUSIC_PATH
+	var music_stream := load(music_path) as AudioStream
+	if music_stream == null:
+		push_warning("No se pudo cargar la música del nivel: %s" % music_path)
+		return
+	if music_stream is AudioStreamOggVorbis:
+		(music_stream as AudioStreamOggVorbis).loop = true
+	if level_music_player.stream != music_stream:
+		level_music_player.stop()
+		level_music_player.stream = music_stream
+	level_music_player.volume_db = -10.0
+	level_music_player.autoplay = true
+	level_music_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	if not level_music_player.playing:
+		level_music_player.play()
+	pursuit_music_player = get_node_or_null("PursuitMusicPlayer") as AudioStreamPlayer
+	if pursuit_music_player == null:
+		pursuit_music_player = AudioStreamPlayer.new()
+		pursuit_music_player.name = "PursuitMusicPlayer"
+		add_child(pursuit_music_player)
+	var pursuit_stream := load(PURSUIT_MUSIC_PATH) as AudioStream
+	if pursuit_stream == null:
+		push_warning("No se pudo cargar la música de persecución: %s" % PURSUIT_MUSIC_PATH)
+		return
+	if pursuit_stream is AudioStreamOggVorbis:
+		(pursuit_stream as AudioStreamOggVorbis).loop = true
+	if pursuit_music_player.stream != pursuit_stream:
+		pursuit_music_player.stop()
+		pursuit_music_player.stream = pursuit_stream
+	pursuit_music_player.volume_db = -8.0
+	pursuit_music_player.autoplay = false
+	pursuit_music_player.process_mode = Node.PROCESS_MODE_ALWAYS
+	pursuit_music_player.stop()
+	level_music_player.stream_paused = false
 
 
 func _load_assets_from_dir(path: String) -> Array[PackedScene]:
@@ -1137,6 +1186,8 @@ func _on_health_skull_body_entered(body: Node3D, skull: Area3D) -> void:
 		return
 	if int(body.get("current_health")) >= int(body.get("max_health")):
 		return
+	if body.has_method("play_sound_effect"):
+		body.call("play_sound_effect", HEALTH_SKULL_PICKUP_SFX)
 	if body.has_method("heal"):
 		body.call("heal", 1)
 	if active_skulls.has(skull):
