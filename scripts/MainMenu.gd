@@ -47,7 +47,7 @@ func _build_interface() -> void:
 	add_child(layout)
 
 	var eyebrow := Label.new()
-	eyebrow.text = "✦  UNA NOCHE SIN LUNA  ✦"
+	eyebrow.text = "✦  UNA NOCHE DE PENUMBRA  ✦"
 	eyebrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	eyebrow.add_theme_color_override("font_color", Color("c28b45"))
 	eyebrow.add_theme_font_size_override("font_size", 16)
@@ -84,7 +84,7 @@ func _build_interface() -> void:
 	layout.add_child(exit_button)
 
 	var footer := Label.new()
-	footer.text = "WASD MOVER  ·  SHIFT CORRER  ·  E INTERACTUAR"
+	footer.text = "WASD MOVER  ·  SHIFT CORRER  ·  CTRL AGACHAR  ·  E/Q INTERACTUAR"
 	footer.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	footer.add_theme_color_override("font_color", Color("746b7c"))
 	footer.add_theme_font_size_override("font_size", 11)

@@ -3,9 +3,9 @@
 [ext_resource type="Script" uid="uid://ct2f02wxibn4t" path="res://scripts/Player.gd" id="1_os0vb"]
 [ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
 [ext_resource type="Script" uid="uid://56mdnjrdeemm" path="res://scripts/LevelBuilder.gd" id="3_builder"]
-[ext_resource type="Script" path="res://scripts/PauseMenu.gd" id="4_pause_menu"]
-[ext_resource type="Script" path="res://scripts/HealthHUD.gd" id="5_health_hud"]
-[ext_resource type="Script" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
+[ext_resource type="Script" uid="uid://iyxf53tehwsq" path="res://scripts/PauseMenu.gd" id="4_pause_menu"]
+[ext_resource type="Script" uid="uid://bp8gxl73x2mkf" path="res://scripts/HealthHUD.gd" id="5_health_hud"]
+[ext_resource type="Script" uid="uid://xx1wgpux0f5v" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_3h0py"]
 
@@ -13,6 +13,8 @@
 
 [node name="Level_01" type="Node3D" unique_id=513129815]
 script = ExtResource("3_builder")
+level_number = 1
+grid_size = Vector2i(15, 15)
 
 [node name="Player" type="CharacterBody3D" parent="." unique_id=1398787996 node_paths=PackedStringArray("camera", "interaction_ray")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
@@ -34,6 +36,7 @@ target_position = Vector3(0, 0, -10)
 script = ExtResource("2_tkx3x")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Enemy" unique_id=1573094753]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 shape = SubResource("CapsuleShape3D_jgy4n")
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="Enemy" unique_id=2023775287]
@@ -44,16 +47,16 @@ target_position = Vector3(0, 0, -10)
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="." unique_id=1606646690]
 
-[node name="PauseMenu" type="CanvasLayer" parent="."]
+[node name="PauseMenu" type="CanvasLayer" parent="." unique_id=500506421]
 process_mode = 3
 layer = 10
 script = ExtResource("4_pause_menu")
 
-[node name="HealthHUD" type="CanvasLayer" parent="."]
+[node name="HealthHUD" type="CanvasLayer" parent="." unique_id=965605390]
 layer = 5
 script = ExtResource("5_health_hud")
 
-[node name="GameOverMenu" type="CanvasLayer" parent="."]
+[node name="GameOverMenu" type="CanvasLayer" parent="." unique_id=295864501]
 process_mode = 3
 layer = 11
 script = ExtResource("6_game_over")

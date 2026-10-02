@@ -6,8 +6,6 @@ signal restart_started
 const LEVEL_SCENE_PATHS: Array[String] = [
 	"res://scenes/Level_01.tscn",
 	"res://scenes/Level_02.tscn",
-	"res://scenes/Level_03.tscn",
-	"res://scenes/Level_04.tscn",
 ]
 
 @export var restart_delay: float = 1.0
@@ -15,7 +13,6 @@ const LEVEL_SCENE_PATHS: Array[String] = [
 var current_level_index: int = 0
 var _player: Node
 var _restart_pending: bool = false
-var _completion_pending: bool = false
 
 
 func _ready() -> void:
@@ -28,28 +25,9 @@ func register_player(player: Node) -> void:
 
 
 func check_level_completion() -> bool:
-	if _completion_pending or _player == null or not is_instance_valid(_player):
+	if _player == null or not is_instance_valid(_player):
 		return false
-	var collected := int(_player.get("items_collected"))
-	var required := int(_player.get("total_items_needed"))
-	if collected < required:
-		return false
-	_completion_pending = true
-	var completed_level := current_level_index + 1
-	if current_level_index + 1 < LEVEL_SCENE_PATHS.size():
-		var next_index := current_level_index + 1
-		level_completed.emit(completed_level, next_index + 1)
-		current_level_index = next_index
-		var error := get_tree().change_scene_to_file(LEVEL_SCENE_PATHS[next_index])
-		if error != OK:
-			current_level_index = next_index - 1
-			_completion_pending = false
-			push_error("No se pudo cargar el siguiente nivel: %s (error %d)." % [LEVEL_SCENE_PATHS[next_index], error])
-			return false
-	else:
-		level_completed.emit(completed_level, 0)
-		print("Ritual completado: terminaste los cuatro niveles.")
-	return true
+	return _player.has_method("can_escape_cemetery") and bool(_player.call("can_escape_cemetery"))
 
 
 func restart_current_level() -> void:
