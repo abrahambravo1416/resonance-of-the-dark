@@ -4,11 +4,13 @@ const LEVEL_SCENE := "res://scenes/Level_01.tscn"
 const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 
 var _title: Label
+var _high_score_label: Label
 var _vignette_material: ShaderMaterial
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_node("/root/LevelManager").call("set_gameplay_hud_visible", false)
 	var music_player := get_node_or_null("MenuMusicPlayer") as AudioStreamPlayer
 	if music_player != null:
 		if music_player.stream is AudioStreamOggVorbis:
@@ -85,6 +87,14 @@ func _build_interface() -> void:
 	subtitle.add_theme_color_override("font_color", Color("a99caf"))
 	subtitle.add_theme_font_size_override("font_size", 13)
 	layout.add_child(subtitle)
+
+	_high_score_label = Label.new()
+	_high_score_label.name = "HighScore"
+	_high_score_label.text = "MEJOR PUNTUACIÓN: %d" % get_node("/root/GameManager").get("high_score")
+	_high_score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_high_score_label.add_theme_color_override("font_color", Color("f0a34c"))
+	_high_score_label.add_theme_font_size_override("font_size", 16)
+	layout.add_child(_high_score_label)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 8.0
@@ -189,6 +199,7 @@ func _animate_title() -> void:
 
 
 func _start_game() -> void:
+	get_node("/root/GameManager").reset_run()
 	get_tree().change_scene_to_file(LEVEL_SCENE)
 
 

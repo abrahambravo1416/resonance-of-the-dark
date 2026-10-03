@@ -4,6 +4,7 @@ const MAIN_MENU_SCENE := "res://scenes/MainMenu.tscn"
 const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 
 var _overlay: Control
+var _subtitle: Label
 var _player: Node
 
 
@@ -18,6 +19,8 @@ func _ready() -> void:
 			_player.connect("player_died", callback)
 		if bool(_player.get("is_dead")):
 			_show_game_over()
+	if LevelManager != null and not LevelManager.level_time_expired.is_connected(_show_timeout_game_over):
+		LevelManager.level_time_expired.connect(_show_timeout_game_over)
 
 
 func _build_interface() -> void:
@@ -59,12 +62,12 @@ func _build_interface() -> void:
 	title.add_theme_font_size_override("font_size", 48)
 	layout.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "No fuiste tan hábil"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override("font_color", Color("e6c7c3"))
-	subtitle.add_theme_font_size_override("font_size", 18)
-	layout.add_child(subtitle)
+	_subtitle = Label.new()
+	_subtitle.text = "No fuiste tan hábil"
+	_subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_subtitle.add_theme_color_override("font_color", Color("e6c7c3"))
+	_subtitle.add_theme_font_size_override("font_size", 18)
+	layout.add_child(_subtitle)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 12.0
@@ -120,6 +123,11 @@ func _show_game_over() -> void:
 	_overlay.visible = true
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _show_timeout_game_over() -> void:
+	_subtitle.text = "¡Se acabó el tiempo!"
+	_show_game_over()
 
 
 func _restart_level() -> void:

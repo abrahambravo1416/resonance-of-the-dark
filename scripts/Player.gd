@@ -154,6 +154,9 @@ var _has_escaped: bool = false
 var _purification_sequence_active: bool = false
 var _purification_sequence_finished: bool = false
 var _victory_screen_layer: CanvasLayer
+var _level_score_seconds: int = 0
+var _level_score_points: int = 0
+var _is_new_high_score: bool = false
 var _damage_flash_layer: CanvasLayer
 var _damage_flash_rect: ColorRect
 var _damage_flash_tween: Tween
@@ -1137,6 +1140,9 @@ func _camera_rest_position() -> Vector3:
 func _die() -> void:
 	if is_dead:
 		return
+	get_node("/root/GameManager").apply_penalty()
+	get_node("/root/LevelManager").call("stop_level_timer")
+	get_node("/root/LevelManager").call("refresh_time_score_hud")
 	is_dead = true
 	play_sound_effect(SFX_LOSE, true)
 	freeze_controls()
@@ -2067,6 +2073,11 @@ func escape_cemetery() -> void:
 	if _has_escaped or not can_escape_cemetery():
 		return
 	_has_escaped = true
+	_level_score_seconds = int(get_node("/root/LevelManager").get("seconds_left"))
+	_level_score_points = _level_score_seconds
+	get_node("/root/GameManager").add_level_score(_level_score_points)
+	get_node("/root/LevelManager").call("stop_level_timer")
+	get_node("/root/LevelManager").call("refresh_time_score_hud")
 	update_objective_ui()
 	freeze_controls()
 	if _interaction_prompt != null:
@@ -2097,6 +2108,7 @@ func _show_level_complete_screen() -> void:
 
 
 func _show_final_victory_screen() -> void:
+	_is_new_high_score = bool(get_node("/root/GameManager").call("check_and_update_high_score"))
 	_show_escape_screen(
 		"¡EL RITUAL ABSOLUTO SE HA CUMPLIDO!",
 		"Has profanado las tumbas, desafiado al enjambre y escapado con vida.",
@@ -2130,9 +2142,9 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	panel.name = "EscapePanel"
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -360.0
-	panel.offset_top = -190.0
+	panel.offset_top = -235.0
 	panel.offset_right = 360.0
-	panel.offset_bottom = 190.0
+	panel.offset_bottom = 235.0
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.035, 0.025, 0.055, 0.97)
 	panel_style.border_color = Color(0.55, 0.28, 0.2, 0.95)
@@ -2179,14 +2191,32 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	layout.add_child(description)
 
 	if show_continue:
+		_add_escape_summary_line(layout, "Tiempo restante: %d seg" % _level_score_seconds)
+		_add_escape_summary_line(layout, "Puntos ganados: +%d" % _level_score_points)
+		_add_escape_summary_line(layout, "Puntuación Total: %d" % get_node("/root/GameManager").get("total_score"), true)
+	else:
+		_add_escape_summary_line(layout, "PUNTUACIÓN TOTAL: %d pts" % get_node("/root/GameManager").get("total_score"), true)
+		if _is_new_high_score:
+			_add_escape_summary_line(layout, "¡NUEVA MEJOR PUNTUACIÓN!", true)
+	if show_continue:
 		var continue_button := _make_escape_button("CONTINUAR AL NIVEL %d" % (current_level_number + 1), true)
 		continue_button.pressed.connect(_continue_to_next_level)
 		layout.add_child(continue_button)
-	var menu_button := _make_escape_button("MENÚ PRINCIPAL", not show_continue)
+	var menu_text := "MENÚ PRINCIPAL" if show_continue else "VOLVER AL MENÚ PRINCIPAL"
+	var menu_button := _make_escape_button(menu_text, not show_continue)
 	menu_button.pressed.connect(_return_to_main_menu)
 	layout.add_child(menu_button)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = true
+
+
+func _add_escape_summary_line(layout: VBoxContainer, line_text: String, emphasized: bool = false) -> void:
+	var line := Label.new()
+	line.text = line_text
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.add_theme_font_size_override("font_size", 18 if emphasized else 16)
+	line.add_theme_color_override("font_color", Color(0.96, 0.72, 0.42) if emphasized else Color(0.82, 0.8, 0.86))
+	layout.add_child(line)
 
 
 func _make_escape_button(button_text: String, highlighted: bool) -> Button:
@@ -2224,6 +2254,7 @@ func _continue_to_next_level() -> void:
 
 func _return_to_main_menu() -> void:
 	get_tree().paused = false
+	get_node("/root/GameManager").call("reset_run")
 	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
 
 

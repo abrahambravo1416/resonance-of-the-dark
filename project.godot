@@ -17,8 +17,9 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 LevelManager="*res://scripts/LevelManager.gd"
+_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
+GameManager="*res://scripts/GameManager.gd"
 
 [display]
 
