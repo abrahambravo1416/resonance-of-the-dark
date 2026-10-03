@@ -7,13 +7,15 @@ class_name LevelBuilder
 @export_group("Generation")
 @export var auto_build_on_ready: bool = true
 @export var grid_size: Vector2i = Vector2i(30, 30)
-@export_range(1, 3, 1) var level_number: int = 1
+@export_range(1, 4, 1) var level_number: int = 1
 @export_range(1.0, 20.0, 0.25) var cell_size: float = 3.0
 @export_range(0.0, 0.8, 0.05) var obstacle_density: float = 0.3
 @export_range(0.0, 1.0, 0.05) var decoration_density: float = 0.6
+@export_range(0.5, 4.0, 0.1) var collectible_minimum_clearance: float = 1.5
 @export_range(0, 8, 1) var open_grave_count: int = 8
 @export_range(0.4, 1.5, 0.05) var open_grave_depth: float = 0.8
 @export_range(2, 3, 1) var player_spawn_clear_radius: int = 2
+@export_range(3.0, 12.0, 0.5) var exit_clearance_radius: float = 3.0
 @export var random_seed: int = 0
 
 @export_group("Assets")
@@ -48,6 +50,11 @@ const OPEN_GRAVE_ASSET_PATH: String = "res://assets/halloween/gltf/floor_dirt_gr
 const FLOOR_DIRT_ASSET_PATH: String = "res://assets/halloween/gltf/floor_dirt.gltf"
 const RITUAL_ALTAR_ASSET_PATH: String = "res://assets/halloween/gltf/shrine_candles.gltf"
 const EXIT_GATE_ASSET_PATH: String = "res://assets/halloween/gltf/arch_gate.gltf"
+const ABSOLUTE_RITUAL_RELIC_ASSET_PATHS: Array[String] = [
+	"res://assets/halloween/gltf/pumpkin_yellow_jackolantern.gltf",
+	"res://assets/halloween/gltf/coffin_decorated.gltf",
+]
+const ABSOLUTE_RITUAL_DELIVERY_RADIUS: float = 2.2
 const HALLOWEEN_GLTF_PATH: String = "res://assets/halloween/gltf"
 const HEALTH_SKULL_COUNT: int = 3
 const HEALTH_SKULL_RESPAWN_INTERVAL: float = 30.0
@@ -103,6 +110,11 @@ var level_music_player: AudioStreamPlayer
 var pursuit_music_player: AudioStreamPlayer
 var active_skulls: Array = []
 var active_pumpkins: Array = []
+var absolute_ritual_relics: Array[Node3D] = []
+var absolute_ritual_relics_root: Node3D
+var absolute_ritual_delivery_area: Area3D
+var absolute_ritual_delivery_position: Vector3 = Vector3.ZERO
+var absolute_ritual_relics_delivered: int = 0
 var _patrol_markers: Array[Node3D] = []
 var _halloween_scenes: Array[PackedScene] = []
 var _decoration_scenes: Array[PackedScene] = []
@@ -112,12 +124,16 @@ var _rng := RandomNumberGenerator.new()
 var _blocked_cells: Dictionary[Vector2i, bool] = {}
 var _free_cells: Array[Vector2i] = []
 var _open_grave_cells: Array[Vector2i] = []
+var _hiding_clearance_cells: Array[Vector2i] = []
+var _decoration_clearance_cells: Array[Vector2i] = []
 var _player_spawn_cell: Vector2i = Vector2i.ZERO
 var _exit_gate_cell: Vector2i = Vector2i.ZERO
 var _exit_gate_is_open: bool = false
 var _navigation_bake_pending: bool = false
 var _enemy_count: int = 2
 var _ritual_altar_count: int = 2
+var _pumpkin_count: int = 7
+var _absolute_ritual_relic_count: int = 0
 var _health_skull_respawn_timer: Timer
 var _health_skull_respawns_remaining: int = 0
 
@@ -143,6 +159,10 @@ func build_map() -> void:
 	_clear_children(items_root)
 	active_skulls.clear()
 	active_pumpkins.clear()
+	absolute_ritual_relics.clear()
+	absolute_ritual_relics_root = null
+	absolute_ritual_delivery_area = null
+	absolute_ritual_relics_delivered = 0
 	_health_skull_respawns_remaining = 0
 	if _health_skull_respawn_timer != null:
 		_health_skull_respawn_timer.stop()
@@ -153,9 +173,11 @@ func build_map() -> void:
 	_blocked_cells.clear()
 	_free_cells.clear()
 	_open_grave_cells.clear()
+	_hiding_clearance_cells.clear()
+	_decoration_clearance_cells.clear()
 	_patrol_markers.clear()
-	_build_floor_and_maze()
 	_exit_gate_cell = Vector2i(0, grid_size.y / 2)
+	_build_floor_and_maze()
 	_extend_exit_gate_floor()
 	_exit_gate_is_open = false
 	_spawn_perimeter_fences()
@@ -167,34 +189,48 @@ func build_map() -> void:
 	_spawn_open_graves()
 	if level_number < 3:
 		spawn_collectibles()
+	_spawn_passage_decorations()
 	if level_number >= 2:
 		spawn_health_skulls()
-	if level_number == 3:
+	if level_number >= 3:
 		spawn_pumpkins()
-	_spawn_passage_decorations()
+	if level_number == 4:
+		spawn_absolute_ritual_relics()
 	generate_patrol_points()
 	if bake_navigation_after_build:
 		bake_navigation()
 	else:
 		_activate_enemy_navigation()
-	if level_number >= 2 and player != null and player.has_method("show_level_intro"):
+	if player != null and player.has_method("show_level_intro"):
 		player.call("show_level_intro", level_number)
 
 
 func _apply_level_profile() -> void:
-	level_number = clampi(level_number, 1, 3)
+	level_number = clampi(level_number, 1, 4)
 	if level_number == 1:
 		grid_size = Vector2i(15, 15)
 		_enemy_count = 2
 		_ritual_altar_count = 2
+		_pumpkin_count = 7
+		_absolute_ritual_relic_count = 0
 	elif level_number == 2:
 		grid_size = Vector2i(30, 30)
 		_enemy_count = 3
 		_ritual_altar_count = 4
-	else:
+		_pumpkin_count = 7
+		_absolute_ritual_relic_count = 0
+	elif level_number == 3:
 		grid_size = Vector2i(35, 35)
 		_enemy_count = 3
 		_ritual_altar_count = 4
+		_pumpkin_count = 7
+		_absolute_ritual_relic_count = 0
+	else:
+		grid_size = Vector2i(35, 35)
+		_enemy_count = 4
+		_ritual_altar_count = 4
+		_pumpkin_count = 4
+		_absolute_ritual_relic_count = 2
 
 
 func _configure_level_music() -> void:
@@ -203,7 +239,7 @@ func _configure_level_music() -> void:
 		level_music_player = AudioStreamPlayer.new()
 		level_music_player.name = "LevelMusicPlayer"
 		add_child(level_music_player)
-	var music_path: String = LEVEL_3_MUSIC_PATH if level_number == 3 else LEVEL_1_2_MUSIC_PATH
+	var music_path: String = LEVEL_3_MUSIC_PATH if level_number >= 3 else LEVEL_1_2_MUSIC_PATH
 	var music_stream := load(music_path) as AudioStream
 	if music_stream == null:
 		push_warning("No se pudo cargar la música del nivel: %s" % music_path)
@@ -456,6 +492,12 @@ func _build_floor_and_maze() -> void:
 			# random spawns. The ground/path visuals are generated separately.
 			if _is_spawn_clear_cell(cell):
 				continue
+			if _is_exit_clear_cell(cell):
+				_free_cells.append(cell)
+				continue
+			if _is_level4_reserved_cell(cell):
+				_free_cells.append(cell)
+				continue
 			if _is_protected_corridor(cell, center_x, center_z):
 				_free_cells.append(cell)
 				continue
@@ -518,6 +560,8 @@ func _choose_open_grave_cells() -> void:
 			if x > 0 and x < grid_size.x - 1 and z > 0 and z < grid_size.y - 1 \
 			and _is_protected_corridor(cell, grid_size.x / 2, grid_size.y / 2) \
 			and not _is_spawn_clear_cell(cell) \
+			and not _is_exit_clear_cell(cell) \
+			and not _is_level4_reserved_cell(cell) \
 			and cell != Vector2i.ZERO \
 			and cell != Vector2i(grid_size.x - 1, grid_size.y - 1):
 				candidates.append(cell)
@@ -751,6 +795,9 @@ func _add_obstacle(world_position: Vector3) -> void:
 			return
 		if _is_crypt_building_asset(asset_name):
 			_add_visual_bounds_collision(body, "CryptBuildingCollision", asset_name, 2.2)
+			return
+		if asset_name.contains("gravemarker_b"):
+			_add_gravemarker_b_collision(body, _get_combined_visual_aabb(body))
 			return
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -1084,6 +1131,7 @@ func spawn_hiding_zones() -> void:
 	var defaults := _default_hiding_scenes()
 	for index in cells.size():
 		var cell := cells[index]
+		_hiding_clearance_cells.append(cell)
 		var zone := HidingZone.new()
 		zone.name = "HidingZone_%02d" % (index + 1)
 		zone.position = _cell_to_world(cell)
@@ -1152,7 +1200,10 @@ func spawn_health_skulls() -> void:
 
 
 func _spawn_health_skull() -> bool:
-	var candidates: Array[Vector2i] = _free_cells.duplicate()
+	var candidates: Array[Vector2i] = []
+	for free_cell in _free_cells:
+		if not _is_level4_reserved_cell(free_cell) and _has_collectible_clearance(free_cell):
+			candidates.append(free_cell)
 	if candidates.is_empty():
 		return false
 	var cell: Vector2i = candidates[_rng.randi_range(0, candidates.size() - 1)]
@@ -1170,35 +1221,41 @@ func _spawn_health_skull() -> bool:
 		return false
 	skull.name = "HealthSkull_%02d" % (active_skulls.size() + 1)
 	skull.position = _cell_to_world(cell)
+	skull.monitoring = false
+	skull.monitorable = false
 	skull.set_meta("cell", cell)
-	skull.body_entered.connect(_on_health_skull_body_entered.bind(skull))
 	items_root.add_child(skull)
 	active_skulls.append(skull)
 	return true
 
 
-func _on_health_skull_body_entered(body: Node3D, skull: Area3D) -> void:
-	if not is_instance_valid(skull) or not is_instance_valid(body):
-		return
-	if body != player and not body.is_in_group("player"):
-		return
-	if body.get("current_health") == null or body.get("max_health") == null:
-		return
-	if int(body.get("current_health")) >= int(body.get("max_health")):
-		return
-	if body.has_method("play_sound_effect"):
-		body.call("play_sound_effect", HEALTH_SKULL_PICKUP_SFX)
-	if body.has_method("heal"):
-		body.call("heal", 1)
-	if active_skulls.has(skull):
-		active_skulls.erase(skull)
-		var cell_variant: Variant = skull.get_meta("cell", null)
-		if cell_variant is Vector2i and not _free_cells.has(cell_variant):
-			_free_cells.append(cell_variant)
+func get_nearby_health_skull(collector: Node3D, max_distance: float = 2.0) -> Node3D:
+	return _get_nearby_pickup(active_skulls, collector, max_distance)
+
+
+func try_collect_nearby_health_skull(collector: Node3D) -> bool:
+	if level_number < 2 or collector == null:
+		return false
+	if collector.get("current_health") == null or collector.get("max_health") == null:
+		return false
+	if int(collector.get("current_health")) >= int(collector.get("max_health")):
+		return false
+	var skull := get_nearby_health_skull(collector, 2.0) as Area3D
+	if skull == null or not active_skulls.has(skull):
+		return false
+	if collector.has_method("play_sound_effect"):
+		collector.call("play_sound_effect", HEALTH_SKULL_PICKUP_SFX)
+	if collector.has_method("heal"):
+		collector.call("heal", 1)
+	active_skulls.erase(skull)
+	var cell_variant: Variant = skull.get_meta("cell", null)
+	if cell_variant is Vector2i and not _free_cells.has(cell_variant):
+		_free_cells.append(cell_variant)
 	skull.queue_free()
-	if active_skulls.is_empty() and _health_skull_respawns_remaining == 0:
+	if active_skulls.is_empty() and _health_skull_respawns_remaining == 0 and _health_skull_respawn_timer != null:
 		_health_skull_respawns_remaining = HEALTH_SKULL_COUNT
 		_health_skull_respawn_timer.start(HEALTH_SKULL_RESPAWN_INTERVAL)
+	return true
 
 
 func _on_health_skull_respawn_timeout() -> void:
@@ -1214,8 +1271,28 @@ func get_active_skulls() -> Array:
 	return active_skulls
 
 
+func _get_nearby_pickup(pickups: Array, collector: Node3D, max_distance: float) -> Node3D:
+	if collector == null or max_distance < 0.0:
+		return null
+	var max_distance_squared: float = max_distance * max_distance
+	var nearest_pickup: Node3D
+	var nearest_distance_squared: float = max_distance_squared
+	for pickup in pickups:
+		if not is_instance_valid(pickup) or not (pickup is Node3D):
+			continue
+		var pickup_node := pickup as Node3D
+		var offset: Vector3 = pickup_node.global_position - collector.global_position
+		offset.y = 0.0
+		var distance_squared: float = offset.length_squared()
+		if distance_squared > nearest_distance_squared:
+			continue
+		nearest_pickup = pickup_node
+		nearest_distance_squared = distance_squared
+	return nearest_pickup
+
+
 func spawn_pumpkins() -> void:
-	if level_number != 3:
+	if level_number < 3:
 		return
 	var scene_to_spawn := pumpkin_scene
 	if scene_to_spawn == null:
@@ -1223,8 +1300,13 @@ func spawn_pumpkins() -> void:
 	if scene_to_spawn == null:
 		push_error("No se pudo cargar scenes/Pumpkin.tscn.")
 		return
-	for index in range(7):
-		var candidates: Array[Vector2i] = _free_cells.duplicate()
+	for index in range(_pumpkin_count):
+		var candidates: Array[Vector2i] = []
+		for free_cell in _free_cells:
+			if not _is_exit_clear_cell(free_cell) \
+			and not _is_level4_reserved_cell(free_cell) \
+			and _has_collectible_clearance(free_cell):
+				candidates.append(free_cell)
 		if candidates.is_empty():
 			push_warning("No hay suficientes celdas transitables para colocar las 7 calabazas.")
 			return
@@ -1243,30 +1325,194 @@ func spawn_pumpkins() -> void:
 
 
 func try_collect_nearby_pumpkin(collector: Node3D) -> bool:
-	if level_number != 3 or collector == null:
+	if level_number < 3 or collector == null:
 		return false
-	for pumpkin in active_pumpkins.duplicate():
-		if not is_instance_valid(pumpkin) or not (pumpkin is Node3D):
-			active_pumpkins.erase(pumpkin)
-			continue
-		var pumpkin_node := pumpkin as Node3D
-		var offset: Vector3 = pumpkin_node.global_position - collector.global_position
-		offset.y = 0.0
-		if offset.length_squared() >= 4.0:
-			continue
-		active_pumpkins.erase(pumpkin)
-		var cell_variant: Variant = pumpkin_node.get_meta("cell", null)
-		if cell_variant is Vector2i and not _free_cells.has(cell_variant):
-			_free_cells.append(cell_variant)
-		pumpkin_node.queue_free()
-		if collector.has_method("collect_pumpkin"):
-			collector.call("collect_pumpkin")
-		return true
-	return false
+	var pumpkin := get_nearby_pumpkin(collector, 2.0)
+	if pumpkin == null or not active_pumpkins.has(pumpkin):
+		return false
+	active_pumpkins.erase(pumpkin)
+	var cell_variant: Variant = pumpkin.get_meta("cell", null)
+	if cell_variant is Vector2i and not _free_cells.has(cell_variant):
+		_free_cells.append(cell_variant)
+	pumpkin.queue_free()
+	if collector.has_method("collect_pumpkin"):
+		collector.call("collect_pumpkin")
+	return true
+
+
+func get_nearby_pumpkin(collector: Node3D, max_distance: float = 2.0) -> Node3D:
+	if level_number < 3:
+		return null
+	return _get_nearby_pickup(active_pumpkins, collector, max_distance)
 
 
 func get_active_pumpkins() -> Array:
 	return active_pumpkins
+
+
+func get_absolute_ritual_relics() -> Array[Node3D]:
+	return absolute_ritual_relics
+
+
+func get_absolute_ritual_delivery_position() -> Vector3:
+	return absolute_ritual_delivery_position
+
+
+func spawn_absolute_ritual_relics() -> void:
+	if level_number != 4 or items_root == null:
+		return
+	absolute_ritual_relics_root = _ensure_container(items_root, "AbsoluteRitualConstruction")
+	_clear_children(absolute_ritual_relics_root)
+	absolute_ritual_relics.clear()
+	absolute_ritual_relics_delivered = 0
+
+	var center_z: int = grid_size.y / 2
+	var spawn_cells: Array[Vector2i] = [
+		Vector2i(grid_size.x - 4, center_z),
+		Vector2i(grid_size.x - 4, center_z + 1),
+	]
+	var delivery_cell := Vector2i(1, center_z)
+	absolute_ritual_delivery_position = to_global(_cell_to_world(delivery_cell))
+	_create_absolute_ritual_delivery_area()
+
+	for index in range(mini(_absolute_ritual_relic_count, ABSOLUTE_RITUAL_RELIC_ASSET_PATHS.size())):
+		var relic_scene := load(ABSOLUTE_RITUAL_RELIC_ASSET_PATHS[index]) as PackedScene
+		if relic_scene == null:
+			push_warning("No se pudo cargar el resto ritual: %s" % ABSOLUTE_RITUAL_RELIC_ASSET_PATHS[index])
+			continue
+		var relic := Node3D.new()
+		relic.name = "AbsoluteRitualRelic_%02d" % (index + 1)
+		relic.add_to_group("absolute_ritual_relics")
+		relic.set_meta("relic_index", index)
+		relic.set_meta("carried", false)
+		relic.set_meta("delivered", false)
+		var visual := relic_scene.instantiate() as Node3D
+		if visual == null:
+			relic.free()
+			continue
+		visual.name = "RelicVisual"
+		var visual_scale: float = 0.62 if index == 0 else 0.55
+		visual.scale = Vector3.ONE * visual_scale
+		relic.add_child(visual)
+		_disable_relic_visual_collisions(visual)
+		_align_visual_base_to_ground(visual, 0.0)
+		absolute_ritual_relics_root.add_child(relic)
+		relic.global_position = to_global(_cell_to_world(spawn_cells[index]))
+		relic.rotation.y = _rng.randf_range(0.0, TAU)
+		_free_cells.erase(spawn_cells[index])
+		absolute_ritual_relics.append(relic)
+
+
+func _create_absolute_ritual_delivery_area() -> void:
+	var area := Area3D.new()
+	area.name = "AbsoluteRitualDeliveryArea"
+	area.collision_layer = 0
+	area.collision_mask = 1
+	area.monitoring = true
+	area.monitorable = false
+	var collision := CollisionShape3D.new()
+	collision.name = "DeliveryAreaShape"
+	var cylinder := CylinderShape3D.new()
+	cylinder.radius = ABSOLUTE_RITUAL_DELIVERY_RADIUS
+	cylinder.height = 2.2
+	collision.shape = cylinder
+	area.add_child(collision)
+	absolute_ritual_relics_root.add_child(area)
+	area.global_position = absolute_ritual_delivery_position + Vector3.UP
+	absolute_ritual_delivery_area = area
+
+	var pad := MeshInstance3D.new()
+	pad.name = "AbsoluteRitualDeliveryPad"
+	var pad_mesh := CylinderMesh.new()
+	pad_mesh.top_radius = 1.8
+	pad_mesh.bottom_radius = 1.8
+	pad_mesh.height = 0.05
+	pad.mesh = pad_mesh
+	var pad_material := StandardMaterial3D.new()
+	pad_material.albedo_color = Color(0.32, 0.19, 0.07, 0.82)
+	pad_material.emission_enabled = true
+	pad_material.emission = Color(0.55, 0.24, 0.04)
+	pad_material.emission_energy_multiplier = 0.45
+	pad.material_override = pad_material
+	absolute_ritual_relics_root.add_child(pad)
+	pad.global_position = absolute_ritual_delivery_position + Vector3.UP * 0.025
+
+
+func get_absolute_ritual_interaction_prompt(actor: Node3D) -> String:
+	if level_number != 4 or actor == null:
+		return ""
+	var carried_variant: Variant = actor.get("carried_absolute_ritual_relic")
+	if carried_variant is Node3D and is_instance_valid(carried_variant):
+		return "[T] Colocar restos" if _is_actor_in_absolute_delivery_area(actor) else ""
+	var nearby_relic := _get_nearby_absolute_relic(actor, 2.0)
+	if nearby_relic == null:
+		return ""
+	var pumpkins_count: int = int(actor.get("pumpkins_collected"))
+	if pumpkins_count < _pumpkin_count:
+		return "[T] Restos bloqueados: junta las %d calabazas" % _pumpkin_count
+	return "[T] Cargar restos"
+
+
+func try_interact_absolute_ritual_relic(actor: Node3D) -> bool:
+	if level_number != 4 or actor == null:
+		return false
+	var carried_variant: Variant = actor.get("carried_absolute_ritual_relic")
+	if carried_variant is Node3D and is_instance_valid(carried_variant):
+		if not _is_actor_in_absolute_delivery_area(actor):
+			return false
+		return _deposit_absolute_ritual_relic(actor, carried_variant as Node3D)
+	if int(actor.get("pumpkins_collected")) < _pumpkin_count:
+		return false
+	var relic := _get_nearby_absolute_relic(actor, 2.0)
+	if relic == null or not actor.has_method("carry_absolute_ritual_relic"):
+		return false
+	if not bool(actor.call("carry_absolute_ritual_relic", relic)):
+		return false
+	relic.set_meta("carried", true)
+	return true
+
+
+func _get_nearby_absolute_relic(actor: Node3D, max_distance: float) -> Node3D:
+	var nearest_relic: Node3D
+	var nearest_distance_squared: float = max_distance * max_distance
+	for relic in absolute_ritual_relics:
+		if not is_instance_valid(relic):
+			continue
+		if bool(relic.get_meta("carried", false)) or bool(relic.get_meta("delivered", false)):
+			continue
+		var offset: Vector3 = relic.global_position - actor.global_position
+		offset.y = 0.0
+		var distance_squared: float = offset.length_squared()
+		if distance_squared > nearest_distance_squared:
+			continue
+		nearest_relic = relic
+		nearest_distance_squared = distance_squared
+	return nearest_relic
+
+
+func _is_actor_in_absolute_delivery_area(actor: Node3D) -> bool:
+	var offset: Vector3 = actor.global_position - absolute_ritual_delivery_position
+	offset.y = 0.0
+	return offset.length_squared() <= ABSOLUTE_RITUAL_DELIVERY_RADIUS * ABSOLUTE_RITUAL_DELIVERY_RADIUS
+
+
+func _deposit_absolute_ritual_relic(actor: Node3D, relic: Node3D) -> bool:
+	if not actor.has_method("release_absolute_ritual_relic"):
+		return false
+	var released_variant: Variant = actor.call("release_absolute_ritual_relic")
+	if released_variant != relic or not is_instance_valid(relic):
+		return false
+	relic.reparent(absolute_ritual_relics_root)
+	var slot_index: int = absolute_ritual_relics_delivered
+	var side_offset: float = -1.05 if slot_index == 0 else 1.05
+	relic.global_position = absolute_ritual_delivery_position + Vector3(0.25, 0.0, side_offset)
+	relic.global_rotation = Vector3(0.0, _rng.randf_range(0.0, TAU), 0.0)
+	relic.set_meta("carried", false)
+	relic.set_meta("delivered", true)
+	absolute_ritual_relics_delivered = mini(absolute_ritual_relics_delivered + 1, _absolute_ritual_relic_count)
+	if actor.has_method("set_absolute_ritual_relic_progress"):
+		actor.call("set_absolute_ritual_relic_progress", absolute_ritual_relics_delivered, _absolute_ritual_relic_count)
+	return true
 
 
 func spawn_ritual_altars() -> void:
@@ -1275,7 +1521,7 @@ func spawn_ritual_altars() -> void:
 	_clear_children(ritual_altars_root)
 	ritual_shrines.clear()
 	if player != null and is_instance_valid(player) and player.has_method("configure_level"):
-		player.call("configure_level", level_number, _ritual_altar_count)
+		player.call("configure_level", level_number, _ritual_altar_count, _absolute_ritual_relic_count)
 	var shrine_scene := load(RITUAL_ALTAR_ASSET_PATH) as PackedScene
 	var altar_cells := _choose_ritual_altar_cells(_ritual_altar_count)
 	if altar_cells.size() < _ritual_altar_count:
@@ -1384,7 +1630,9 @@ func _choose_ritual_altar_cells(requested_count: int) -> Array[Vector2i]:
 		for x in range(1, grid_size.x - 1):
 			var cell := Vector2i(x, z)
 			if _blocked_cells.has(cell) or _open_grave_cells.has(cell) \
-			or _is_spawn_clear_cell(cell) or cell == _exit_gate_cell \
+			or _is_spawn_clear_cell(cell) or _is_exit_clear_cell(cell) \
+			or _is_level4_reserved_cell(cell) \
+			or cell == _exit_gate_cell \
 			or enemy_spawn_cells.has(cell):
 				continue
 			candidates.append(cell)
@@ -1570,12 +1818,19 @@ func _patrol_cells_for_enemy(enemy_index: int) -> Array[Vector2i]:
 				Vector2i(grid_size.x - 2, grid_size.y - 2),
 				Vector2i(right_x, grid_size.y - 2),
 			]
-		_: # Northwest sector.
+		2: # Northwest sector.
 			return [
 				Vector2i(2, 2),
 				Vector2i(left_x, 2),
 				Vector2i(left_x, upper_z),
 				Vector2i(2, upper_z),
+			]
+		_: # Southwest sector.
+			return [
+				Vector2i(2, lower_z),
+				Vector2i(left_x, lower_z),
+				Vector2i(left_x, grid_size.y - 2),
+				Vector2i(2, grid_size.y - 2),
 			]
 
 
@@ -1718,6 +1973,7 @@ func _place_player_and_enemy() -> void:
 		Vector2i(grid_size.x - 2, 2),
 		Vector2i(grid_size.x - 2, grid_size.y - 2),
 		Vector2i(2, 2),
+		Vector2i(2, grid_size.y - 2),
 	]
 	var claimed_spawn_cells: Dictionary[Vector2i, bool] = {}
 	for index in range(enemies.size()):
@@ -1758,7 +2014,8 @@ func _select_enemy_spawn_cell(requested: Vector2i, claimed: Dictionary[Vector2i,
 		for x in range(1, grid_size.x - 1):
 			var candidate := Vector2i(x, z)
 			if _blocked_cells.has(candidate) or _open_grave_cells.has(candidate) \
-			or claimed.has(candidate) or _is_spawn_clear_cell(candidate):
+			or claimed.has(candidate) or _is_spawn_clear_cell(candidate) \
+			or _is_exit_clear_cell(candidate) or _is_level4_reserved_cell(candidate):
 				continue
 			var distance: float = candidate.distance_squared_to(requested)
 			if distance < best_distance:
@@ -1778,6 +2035,10 @@ func _add_hiding_solid(zone: HidingZone, structure_visual: Node3D = null, asset_
 		solid.add_to_group("hide_objects")
 	if _is_leaf_tree_asset(asset_name):
 		solid.add_to_group("leaf_trees")
+	if asset_name.contains("gravemarker_b") and structure_visual != null:
+		_add_gravemarker_b_collision(solid, _get_combined_visual_aabb(zone))
+		zone.add_child(solid)
+		return
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	if _is_crypt_building_asset(asset_name) and structure_visual != null:
@@ -2011,7 +2272,10 @@ func _align_visual_base_to_ground(root: Node3D, ground_y: float = 0.0) -> void:
 func _spawn_passage_decorations() -> void:
 	if _decoration_scenes.is_empty() or _free_cells.is_empty():
 		return
-	var candidates := _free_cells.duplicate()
+	var candidates: Array[Vector2i] = []
+	for free_cell in _free_cells:
+		if not _is_exit_clear_cell(free_cell) and not _is_level4_reserved_cell(free_cell):
+			candidates.append(free_cell)
 	var scene_bag: Array[PackedScene] = _decoration_scenes.duplicate()
 	scene_bag.shuffle()
 	var target_count := mini(candidates.size(), roundi(float(candidates.size()) * decoration_density))
@@ -2021,8 +2285,11 @@ func _spawn_passage_decorations() -> void:
 			scene_bag.shuffle()
 		var cell_index := _rng.randi_range(0, candidates.size() - 1)
 		var cell: Vector2i = candidates.pop_at(cell_index)
+		_free_cells.erase(cell)
 		var scene: PackedScene = scene_bag.pop_back()
 		var asset_name := scene.resource_path.get_file().get_basename().to_lower()
+		if _is_large_clearance_asset(asset_name):
+			_decoration_clearance_cells.append(cell)
 		var prop_body := StaticBody3D.new()
 		prop_body.name = "PassageProp_%02d" % (index + 1)
 		prop_body.collision_layer = 1
@@ -2051,6 +2318,8 @@ func _spawn_passage_decorations() -> void:
 			_add_arch_pillar_collisions(prop_body)
 		elif _is_fence_asset(asset_name):
 			_ensure_fence_collision(prop_body)
+		elif asset_name.contains("gravemarker_b"):
+			_add_gravemarker_b_collision(prop_body, _get_combined_visual_aabb(prop_body))
 		else:
 			_add_visual_bounds_collision(prop_body, "DecorationCollision", asset_name)
 
@@ -2063,6 +2332,13 @@ func _decoration_scale_for(asset_name: String) -> float:
 	if asset_name.contains("tree_") or asset_name.contains("arch") or asset_name.contains("gate"):
 		return 0.58
 	return 0.52
+
+
+func _is_large_clearance_asset(asset_name: String) -> bool:
+	for keyword in ["tree_", "fence", "wall", "grave_", "gravestone", "gravemarker", "crypt", "mausoleum", "pillar", "column", "arch", "gate", "bench", "coffin", "sarcophagus"]:
+		if asset_name.contains(keyword):
+			return true
+	return false
 
 
 func _add_visual_bounds_collision(parent: StaticBody3D, collision_name: String, asset_name: String = "", minimum_height: float = 0.0) -> void:
@@ -2089,6 +2365,32 @@ func _add_visual_bounds_collision(parent: StaticBody3D, collision_name: String, 
 	parent.add_child(collision)
 
 
+func _add_gravemarker_b_collision(parent: StaticBody3D, bounds: AABB) -> void:
+	# Match the wooden cross with a narrow upright and a separate crossbar instead
+	# of the broad full-model box that catches the player's capsule.
+	parent.collision_layer = 1
+	parent.collision_mask = 1
+	if bounds.size == Vector3.ZERO:
+		return
+	var center_x: float = bounds.position.x + bounds.size.x * 0.5
+	var center_z: float = bounds.position.z + bounds.size.z * 0.5
+	var depth: float = maxf(bounds.size.z * 0.8, 0.08)
+	var upright := CollisionShape3D.new()
+	upright.name = "GravemarkerBUprightCollision"
+	var upright_shape := BoxShape3D.new()
+	upright_shape.size = Vector3(maxf(bounds.size.x * 0.24, 0.1), bounds.size.y * 0.94, depth)
+	upright.shape = upright_shape
+	upright.position = Vector3(center_x, bounds.position.y + bounds.size.y * 0.47, center_z)
+	parent.add_child(upright)
+	var crossbar := CollisionShape3D.new()
+	crossbar.name = "GravemarkerBCrossbarCollision"
+	var crossbar_shape := BoxShape3D.new()
+	crossbar_shape.size = Vector3(maxf(bounds.size.x * 0.92, 0.12), maxf(bounds.size.y * 0.14, 0.08), depth)
+	crossbar.shape = crossbar_shape
+	crossbar.position = Vector3(center_x, bounds.position.y + bounds.size.y * 0.71, center_z)
+	parent.add_child(crossbar)
+
+
 func _strip_embedded_colliders(root: Node) -> void:
 	# Generated static bodies receive a controlled collider in the builder. Removing
 	# import-side simplified boxes prevents arches from sealing their center opening.
@@ -2104,6 +2406,22 @@ func _strip_embedded_colliders(root: Node) -> void:
 		if polygon_node != null and polygon_node.get_parent() != null:
 			polygon_node.get_parent().remove_child(polygon_node)
 			polygon_node.free()
+
+
+func _disable_relic_visual_collisions(root: Node) -> void:
+	if root is CollisionObject3D:
+		var collision_object := root as CollisionObject3D
+		collision_object.collision_layer = 0
+		collision_object.collision_mask = 0
+		if collision_object is Area3D:
+			(collision_object as Area3D).monitoring = false
+			(collision_object as Area3D).monitorable = false
+	if root is CollisionShape3D:
+		(root as CollisionShape3D).disabled = true
+	if root is CollisionPolygon3D:
+		(root as CollisionPolygon3D).disabled = true
+	for child in root.get_children():
+		_disable_relic_visual_collisions(child)
 
 
 func _add_fallback_collectible_visual(item: Node3D, item_type: InteractableItem.ItemType) -> void:
@@ -2178,7 +2496,10 @@ func _pick_scene(configured: Array[PackedScene], fallbacks: Array[PackedScene]) 
 
 func _take_random_cells(requested_count: int) -> Array[Vector2i]:
 	var result: Array[Vector2i] = []
-	var pool := _free_cells.duplicate()
+	var pool: Array[Vector2i] = []
+	for cell in _free_cells:
+		if not _is_exit_clear_cell(cell) and not _is_level4_reserved_cell(cell):
+			pool.append(cell)
 	while not pool.is_empty() and result.size() < requested_count:
 		var index := _rng.randi_range(0, pool.size() - 1)
 		var cell: Vector2i = pool.pop_at(index)
@@ -2208,6 +2529,52 @@ func _is_protected_corridor(cell: Vector2i, center_x: int, center_z: int) -> boo
 func _is_spawn_clear_cell(cell: Vector2i) -> bool:
 	return abs(cell.x - _player_spawn_cell.x) <= player_spawn_clear_radius \
 		and abs(cell.y - _player_spawn_cell.y) <= player_spawn_clear_radius
+
+
+func _is_exit_clear_cell(cell: Vector2i) -> bool:
+	# Include half a tile of clearance so large prop footprints cannot intrude into
+	# the requested 3 m safe radius around the exit gate.
+	var safe_radius: float = exit_clearance_radius + cell_size * 0.5
+	var gate_world_position := Vector2(-cell_size * 0.5, float(_exit_gate_cell.y) * cell_size)
+	var cell_world_position := Vector2(float(cell.x) * cell_size, float(cell.y) * cell_size)
+	return cell_world_position.distance_to(gate_world_position) <= safe_radius
+
+
+func _is_level4_reserved_cell(cell: Vector2i) -> bool:
+	if level_number != 4:
+		return false
+	var cell_world_position := Vector2(float(cell.x) * cell_size, float(cell.y) * cell_size)
+	var center_z: float = float(grid_size.y / 2) * cell_size
+	var relic_spawn_center := Vector2(float(grid_size.x - 4) * cell_size, center_z)
+	var delivery_center := Vector2(cell_size, center_z)
+	var spawn_clear: bool = cell_world_position.distance_to(relic_spawn_center) <= cell_size * 2.2
+	var delivery_clear: bool = cell_world_position.distance_to(delivery_center) <= cell_size * 1.65
+	return spawn_clear or delivery_clear
+
+
+func _has_collectible_clearance(cell: Vector2i) -> bool:
+	# Perimeter fences occupy the outer row/column. Keep pickups in the interior,
+	# even where a perimeter path cell is otherwise considered walkable.
+	if cell.x <= 0 or cell.y <= 0 or cell.x >= grid_size.x - 1 or cell.y >= grid_size.y - 1:
+		return false
+	# Obstacle cells represent a tile footprint. Add half a tile to the configured
+	# clearance radius so pickups are not placed immediately beside the collider.
+	var required_cell_distance: float = collectible_minimum_clearance + cell_size * 0.5
+	var required_distance_squared: float = required_cell_distance * required_cell_distance
+	for obstacle_variant in _blocked_cells.keys():
+		var obstacle_cell: Vector2i = obstacle_variant
+		if cell.distance_squared_to(obstacle_cell) * cell_size * cell_size <= required_distance_squared:
+			return false
+	for grave_cell in _open_grave_cells:
+		if cell.distance_squared_to(grave_cell) * cell_size * cell_size <= required_distance_squared:
+			return false
+	for hiding_cell in _hiding_clearance_cells:
+		if cell.distance_squared_to(hiding_cell) * cell_size * cell_size <= required_distance_squared:
+			return false
+	for decoration_cell in _decoration_clearance_cells:
+		if cell.distance_squared_to(decoration_cell) * cell_size * cell_size <= required_distance_squared:
+			return false
+	return true
 
 
 func _cell_to_world(cell: Vector2i) -> Vector3:

@@ -501,7 +501,9 @@ func _can_see_player() -> bool:
 	if _player_is_hidden():
 		return false
 	var eye_position := global_position + Vector3.UP * 0.9
-	var player_position := player.global_position + Vector3.UP * 1.0
+	# Carrying a relic is not a crouch/stealth state. Aim at the player's torso
+	# regardless of the slow carry speed or the visual prop attached to the camera.
+	var player_position: Vector3 = player.global_position + Vector3.UP * _player_detection_height()
 	var to_player := player_position - eye_position
 	if to_player.length() > view_distance:
 		return false
@@ -509,9 +511,36 @@ func _can_see_player() -> bool:
 	if rad_to_deg(forward.angle_to(to_player.normalized())) > view_angle_degrees * 0.5:
 		return false
 	var query := PhysicsRayQueryParameters3D.create(eye_position, player_position)
-	query.exclude = [get_rid()]
+	query.collision_mask = 1
+	var excluded_rids: Array[RID] = [get_rid()]
+	if _player_is_carrying_relic():
+		var carried_relic: Variant = player.get("carried_absolute_ritual_relic")
+		if carried_relic is Node:
+			_append_collision_rids(carried_relic as Node, excluded_rids)
+	query.exclude = excluded_rids
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	return hit.is_empty() or hit.get("collider") == player
+
+
+func _player_detection_height() -> float:
+	if _player_is_carrying_relic():
+		return 1.0
+	var crouching: Variant = player.get("is_crouching")
+	return 0.65 if crouching != null and bool(crouching) else 1.0
+
+
+func _player_is_carrying_relic() -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	var carrying: Variant = player.get("is_carrying_absolute_ritual_relic")
+	return bool(carrying) if carrying != null else false
+
+
+func _append_collision_rids(root: Node, output: Array[RID]) -> void:
+	if root is CollisionObject3D:
+		output.append((root as CollisionObject3D).get_rid())
+	for child in root.get_children():
+		_append_collision_rids(child, output)
 
 
 func _player_noise_level() -> float:

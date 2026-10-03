@@ -1,0 +1,66 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" uid="uid://ct2f02wxibn4t" path="res://scripts/Player.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_enemy"]
+[ext_resource type="Script" uid="uid://56mdnjrdeemm" path="res://scripts/LevelBuilder.gd" id="3_builder"]
+[ext_resource type="Script" uid="uid://iyxf53tehwsq" path="res://scripts/PauseMenu.gd" id="4_pause"]
+[ext_resource type="Script" uid="uid://bp8gxl73x2mkf" path="res://scripts/HealthHUD.gd" id="5_health"]
+[ext_resource type="Script" uid="uid://xx1wgpux0f5v" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
+[ext_resource type="PackedScene" path="res://scenes/HealthSkull.tscn" id="7_skull"]
+[ext_resource type="PackedScene" path="res://scenes/Pumpkin.tscn" id="8_pumpkin"]
+
+[sub_resource type="CapsuleShape3D" id="PlayerCapsule"]
+
+[sub_resource type="CapsuleShape3D" id="EnemyCapsule"]
+
+[node name="Level_04" type="Node3D"]
+script = ExtResource("3_builder")
+level_number = 4
+grid_size = Vector2i(35, 35)
+health_skull_scene = ExtResource("7_skull")
+pumpkin_scene = ExtResource("8_pumpkin")
+
+[node name="Player" type="CharacterBody3D" parent="." node_paths=PackedStringArray("camera", "interaction_ray")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("1_player")
+camera = NodePath("Camera3D")
+interaction_ray = NodePath("Camera3D/RayCast3D")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("PlayerCapsule")
+
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+
+[node name="RayCast3D" type="RayCast3D" parent="Player/Camera3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.0004505813, 0)
+target_position = Vector3(0, 0, -10)
+
+[node name="Enemy" type="CharacterBody3D" parent="."]
+script = ExtResource("2_enemy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("EnemyCapsule")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="Enemy"]
+
+[node name="RayCast3D" type="RayCast3D" parent="Enemy"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.26564026, 0)
+target_position = Vector3(0, 0, -10)
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+process_mode = 3
+layer = 10
+script = ExtResource("4_pause")
+
+[node name="HealthHUD" type="CanvasLayer" parent="."]
+layer = 5
+script = ExtResource("5_health")
+
+[node name="GameOverMenu" type="CanvasLayer" parent="."]
+process_mode = 3
+layer = 11
+script = ExtResource("6_game_over")

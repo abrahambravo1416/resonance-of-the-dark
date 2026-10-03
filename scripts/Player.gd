@@ -10,11 +10,18 @@ signal cemetery_exit_unlocked
 
 const ALTAR_MARKER_COLOR_HEX: String = "#FFAA00"
 const EXIT_GATE_MARKER_COLOR_HEX: String = "#00FF66"
-const PUMPKIN_MARKER_COLOR_HEX: String = "#FF8800"
+const PUMPKIN_MARKER_COLOR_HEX: String = "#FF8000"
+const SKULL_MARKER_COLOR_HEX: String = "#3399FF"
+const ABSOLUTE_RELIC_MARKER_COLOR_HEX: String = "#FFB6C1"
+const RITUAL_DELIVERY_MARKER_COLOR_HEX: String = "#40E0D0"
+const ABSOLUTE_RELIC_MARKER_COLOR: Color = Color(1.0, 0.714, 0.757, 1.0)
+const RITUAL_DELIVERY_MARKER_COLOR: Color = Color(0.251, 0.878, 0.816, 1.0)
 const PUMPKINS_REQUIRED: int = 7
+const FINAL_LEVEL_PUMPKINS_REQUIRED: int = 4
 const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 const SFX_HIDE: AudioStreamWAV = preload("res://audio/Efectos cortos/esconder_salir_escondite.wav")
 const SFX_PUMPKIN: AudioStreamWAV = preload("res://audio/Efectos cortos/recoger_calabazas.wav")
+const SFX_HEALTH_SKULL_PICKUP: AudioStreamWAV = preload("res://audio/Efectos cortos/curarse_con_craneos.wav")
 const SFX_ENEMY_HIT: AudioStreamWAV = preload("res://audio/Efectos cortos/golpeo_de_enemigo.wav")
 const SFX_EXIT_UNLOCK: AudioStreamWAV = preload("res://audio/Efectos cortos/desbloquear_salida.wav")
 const SFX_LOSE: AudioStreamWAV = preload("res://audio/Efectos cortos/lose.wav")
@@ -78,6 +85,10 @@ var noise_level: float = 0.0
 var items_collected: int = 0
 var rituals_completed: int = 0
 var pumpkins_collected: int = 0
+var absolute_ritual_relics_delivered: int = 0
+var total_absolute_ritual_relics: int = 0
+var is_carrying_absolute_ritual_relic: bool = false
+var carried_absolute_ritual_relic: Node3D
 var total_rituals_required: int = 4
 var current_level_number: int = 1
 var ritual_shrines: Array[RitualAltar] = []
@@ -108,7 +119,9 @@ var _radar_arrow: Label
 var _radar_enemy_arrows: Array[Label] = []
 var _radar_skull_markers: Dictionary = {}
 var _radar_pumpkin_markers: Dictionary = {}
+var _radar_absolute_relic_markers: Dictionary = {}
 var _radar_exit_gate_marker: Label
+var _radar_relic_delivery_marker: Label
 var _radar_center_glow: Panel
 var _radar_center_dot: Panel
 var _radar_altar_markers: Array[Label] = []
@@ -124,19 +137,35 @@ var _interaction_prompt: Label
 var _ritual_counter_label: Label
 var _ritual_mission_label: RichTextLabel
 var _pumpkin_counter_label: RichTextLabel
+var _altar_mission_title_label: RichTextLabel
+var _altar_progress_label: RichTextLabel
+var _healing_mission_label: RichTextLabel
+var _absolute_ritual_title_label: RichTextLabel
+var _absolute_ritual_progress_label: RichTextLabel
+var _escape_mission_title_label: RichTextLabel
+var _escape_mission_label: RichTextLabel
+var _objective_container: VBoxContainer
+var _objective_counter_font: Font
+var _objective_instruction_font: Font
 var _pumpkin_lock_message: Label
 var _pumpkin_lock_timer: Timer
 var _exit_gate_nearby: bool = false
 var _has_escaped: bool = false
+var _purification_sequence_active: bool = false
+var _purification_sequence_finished: bool = false
 var _victory_screen_layer: CanvasLayer
 var _damage_flash_layer: CanvasLayer
 var _damage_flash_rect: ColorRect
 var _damage_flash_tween: Tween
 var _camera_shake_tween: Tween
+var _purification_flash_layer: CanvasLayer
+var _purification_flash_rect: ColorRect
+var _purification_flash_tween: Tween
 var walk_audio_player: AudioStreamPlayer
 var _level_2_intro_layer: CanvasLayer
 var _level_2_intro_timer: Timer
-var _level_2_intro_countdown: int = 5
+var _level_2_intro_countdown_label: Label
+var countdown_time: int = 10
 
 
 func _ready() -> void:
@@ -172,7 +201,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_threat_radar(delta)
 	_update_interaction_prompt()
-	if is_dead or current_health >= max_health:
+	if is_dead or current_health >= max_health or current_level_number >= 2:
 		_regeneration_timer = 0.0
 		return
 	_regeneration_timer -= delta
@@ -326,6 +355,20 @@ func _create_threat_radar() -> void:
 	_radar_exit_gate_marker.visible = false
 	_radar_arrow_area.add_child(_radar_exit_gate_marker)
 
+	_radar_relic_delivery_marker = Label.new()
+	_radar_relic_delivery_marker.name = "RelicDeliveryMarker"
+	_radar_relic_delivery_marker.text = "#"
+	_radar_relic_delivery_marker.size = Vector2(14.0, 14.0)
+	_radar_relic_delivery_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_radar_relic_delivery_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_radar_relic_delivery_marker.add_theme_font_size_override("font_size", 14)
+	_radar_relic_delivery_marker.add_theme_color_override("font_color", RITUAL_DELIVERY_MARKER_COLOR)
+	_radar_relic_delivery_marker.add_theme_color_override("font_outline_color", Color(0.0, 0.08, 0.08, 1.0))
+	_radar_relic_delivery_marker.add_theme_constant_override("outline_size", 2)
+	_radar_relic_delivery_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_radar_relic_delivery_marker.visible = false
+	_radar_arrow_area.add_child(_radar_relic_delivery_marker)
+
 	_radar_distance_label = Label.new()
 	_radar_distance_label.name = "ThreatDistance"
 	_radar_distance_label.text = "LEJANÍA DEL ENEMIGO: --.- m"
@@ -365,6 +408,23 @@ func _create_damage_feedback_ui() -> void:
 	_damage_flash_rect.color = Color(1.0, 0.0, 0.0, 0.0)
 	_damage_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_damage_flash_layer.add_child(_damage_flash_rect)
+
+	_purification_flash_layer = CanvasLayer.new()
+	_purification_flash_layer.name = "PurificationFlashLayer"
+	_purification_flash_layer.layer = 100
+	_purification_flash_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_purification_flash_layer)
+
+	_purification_flash_rect = ColorRect.new()
+	_purification_flash_rect.name = "PurificationFlash"
+	_purification_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_purification_flash_rect.offset_left = 0.0
+	_purification_flash_rect.offset_top = 0.0
+	_purification_flash_rect.offset_right = 0.0
+	_purification_flash_rect.offset_bottom = 0.0
+	_purification_flash_rect.color = Color(1.0, 1.0, 1.0, 0.0)
+	_purification_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_purification_flash_layer.add_child(_purification_flash_rect)
 
 
 func _add_radar_line(line_position: Vector2, line_size: Vector2, line_color: Color) -> void:
@@ -429,6 +489,10 @@ func _update_threat_radar(delta: float) -> void:
 		for marker in _radar_altar_markers:
 			marker.visible = false
 		_radar_exit_gate_marker.visible = false
+		_radar_relic_delivery_marker.visible = false
+		for marker in _radar_absolute_relic_markers.values():
+			if is_instance_valid(marker):
+				marker.visible = false
 		return
 	_update_ritual_radar_markers()
 	_update_exit_gate_radar_marker()
@@ -436,6 +500,8 @@ func _update_threat_radar(delta: float) -> void:
 	var radar_center: Vector2 = radar_size * 0.5
 	_update_health_skull_radar_markers(radar_center)
 	_update_pumpkin_radar_markers(radar_center)
+	_update_absolute_relic_radar_markers(radar_center)
+	_update_relic_delivery_radar_marker(radar_center)
 	var closest_distance: float = INF
 	for arrow_index in _radar_enemy_arrows.size():
 		var arrow: Label = _radar_enemy_arrows[arrow_index]
@@ -452,8 +518,7 @@ func _update_threat_radar(delta: float) -> void:
 		if toward_enemy.length_squared() < 0.0001:
 			continue
 		var angle: float = _radar_relative_angle(enemy_node.global_position)
-		var radar_radius: float = minf(39.0 + float(arrow_index) * 5.0, 49.0)
-		var arrow_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
+		var arrow_center: Vector2 = _world_to_radar_position(enemy_node.global_position, radar_center)
 		arrow.pivot_offset = arrow.size * 0.5
 		arrow.position = arrow_center - arrow.size * 0.5
 		arrow.rotation = angle + PI
@@ -508,9 +573,7 @@ func _update_health_skull_radar_markers(radar_center: Vector2) -> void:
 		if toward_skull.length_squared() < 0.0001:
 			marker.visible = false
 			continue
-		var angle: float = _radar_relative_angle(skull_node.global_position)
-		var radar_radius: float = clampf(toward_skull.length() / 30.0 * 50.0, 10.0, 50.0)
-		var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
+		var marker_center: Vector2 = _world_to_radar_position(skull_node.global_position, radar_center)
 		marker.position = marker_center - marker.size * 0.5
 		marker.modulate.a = 0.82 + 0.18 * (0.5 + 0.5 * sin(_radar_flash_time * 8.0 + float(marker_id % 10)))
 		marker.visible = true
@@ -524,7 +587,7 @@ func _update_health_skull_radar_markers(radar_center: Vector2) -> void:
 
 
 func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
-	if current_level_number != 3:
+	if current_level_number < 3:
 		for marker in _radar_pumpkin_markers.values():
 			if is_instance_valid(marker):
 				marker.queue_free()
@@ -550,7 +613,7 @@ func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
 			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			marker.add_theme_font_size_override("font_size", 14)
-			marker.add_theme_color_override("font_color", Color(1.0, 0.5, 0.0))
+			marker.add_theme_color_override("font_color", Color(PUMPKIN_MARKER_COLOR_HEX))
 			marker.add_theme_color_override("font_outline_color", Color(0.12, 0.035, 0.0, 1.0))
 			marker.add_theme_constant_override("outline_size", 2)
 			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -561,9 +624,7 @@ func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
 		if toward_pumpkin.length_squared() < 0.0001:
 			marker.visible = false
 			continue
-		var angle: float = _radar_relative_angle(pumpkin_node.global_position)
-		var radar_radius: float = clampf(toward_pumpkin.length() / 35.0 * 50.0, 10.0, 50.0)
-		var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
+		var marker_center: Vector2 = _world_to_radar_position(pumpkin_node.global_position, radar_center)
 		marker.position = marker_center - marker.size * 0.5
 		marker.modulate.a = 0.88 + 0.12 * (0.5 + 0.5 * sin(_radar_flash_time * 7.0 + float(marker_id % 10)))
 		marker.visible = true
@@ -576,6 +637,80 @@ func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
 		_radar_pumpkin_markers.erase(marker_id)
 
 
+func _update_absolute_relic_radar_markers(radar_center: Vector2) -> void:
+	if current_level_number != 4:
+		for marker in _radar_absolute_relic_markers.values():
+			if is_instance_valid(marker):
+				marker.queue_free()
+		_radar_absolute_relic_markers.clear()
+		return
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("get_absolute_ritual_relics"):
+		return
+	var relics: Array = level_builder.call("get_absolute_ritual_relics")
+	var live_ids: Dictionary = {}
+	for relic in relics:
+		if not is_instance_valid(relic) or not (relic is Node3D):
+			continue
+		var relic_node := relic as Node3D
+		if bool(relic_node.get_meta("carried", false)) or bool(relic_node.get_meta("delivered", false)):
+			continue
+		var marker_id: int = relic_node.get_instance_id()
+		live_ids[marker_id] = true
+		var marker := _radar_absolute_relic_markers.get(marker_id) as Label
+		if marker == null or not is_instance_valid(marker):
+			marker = Label.new()
+			marker.name = "AbsoluteRitualRelicMarker_%d" % marker_id
+			marker.text = "t"
+			marker.size = Vector2(14.0, 14.0)
+			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			marker.add_theme_font_size_override("font_size", 13)
+			marker.add_theme_color_override("font_color", ABSOLUTE_RELIC_MARKER_COLOR)
+			marker.add_theme_color_override("font_outline_color", Color(0.12, 0.025, 0.07, 1.0))
+			marker.add_theme_constant_override("outline_size", 2)
+			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			_radar_arrow_area.add_child(marker)
+			_radar_absolute_relic_markers[marker_id] = marker
+		var toward_relic: Vector3 = relic_node.global_position - global_position
+		toward_relic.y = 0.0
+		if toward_relic.length_squared() < 0.0001:
+			marker.visible = false
+			continue
+		var marker_center: Vector2 = _world_to_radar_position(relic_node.global_position, radar_center)
+		marker.position = marker_center - marker.size * 0.5
+		marker.modulate.a = 0.9 + 0.1 * (0.5 + 0.5 * sin(_radar_flash_time * 6.0 + float(marker_id % 10)))
+		marker.visible = true
+	for marker_id in _radar_absolute_relic_markers.keys().duplicate():
+		if live_ids.has(marker_id):
+			continue
+		var stale_marker := _radar_absolute_relic_markers[marker_id] as Label
+		if is_instance_valid(stale_marker):
+			stale_marker.queue_free()
+		_radar_absolute_relic_markers.erase(marker_id)
+
+
+func _update_relic_delivery_radar_marker(radar_center: Vector2) -> void:
+	if _radar_relic_delivery_marker == null:
+		return
+	_radar_relic_delivery_marker.visible = false
+	if current_level_number != 4 or not is_carrying_absolute_ritual_relic:
+		return
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("get_absolute_ritual_delivery_position"):
+		return
+	var delivery_position: Vector3 = level_builder.call("get_absolute_ritual_delivery_position")
+	var toward_delivery: Vector3 = delivery_position - global_position
+	toward_delivery.y = 0.0
+	if toward_delivery.length_squared() < 0.0001:
+		_radar_relic_delivery_marker.position = radar_center - _radar_relic_delivery_marker.size * 0.5
+	else:
+		var marker_center: Vector2 = _world_to_radar_position(delivery_position, radar_center)
+		_radar_relic_delivery_marker.position = marker_center - _radar_relic_delivery_marker.size * 0.5
+	_radar_relic_delivery_marker.visible = true
+	_radar_relic_delivery_marker.modulate.a = 0.9 + 0.1 * (0.5 + 0.5 * sin(_radar_flash_time * 5.0))
+
+
 func set_ritual_shrines(altars: Array[RitualAltar]) -> void:
 	ritual_shrines.clear()
 	for altar in altars:
@@ -585,48 +720,45 @@ func set_ritual_shrines(altars: Array[RitualAltar]) -> void:
 	_update_ritual_radar_markers()
 
 
-func configure_level(level_number: int, ritual_count: int) -> void:
-	current_level_number = clampi(level_number, 1, 3)
+func configure_level(level_number: int, ritual_count: int, absolute_relic_count: int = 0) -> void:
+	current_level_number = clampi(level_number, 1, 4)
 	total_rituals_required = maxi(1, ritual_count)
+	total_absolute_ritual_relics = maxi(0, absolute_relic_count) if current_level_number == 4 else 0
 	rituals_completed = 0
 	pumpkins_collected = 0
+	absolute_ritual_relics_delivered = 0
+	is_carrying_absolute_ritual_relic = false
+	carried_absolute_ritual_relic = null
 	exit_unlocked = false
+	_purification_sequence_active = false
+	_purification_sequence_finished = false
 	if _pumpkin_counter_label != null:
-		_pumpkin_counter_label.visible = current_level_number == 3
-	if current_level_number == 3:
-		_pumpkin_counter_label.offset_top = 18.0
-		_pumpkin_counter_label.offset_bottom = 50.0
-		_ritual_counter_label.offset_top = 54.0
-		_ritual_counter_label.offset_bottom = 88.0
-		_ritual_mission_label.offset_top = 88.0
-		_ritual_mission_label.offset_bottom = 116.0
-	else:
-		_ritual_counter_label.offset_top = 24.0
-		_ritual_counter_label.offset_bottom = 60.0
-		_ritual_mission_label.offset_top = 60.0
-		_ritual_mission_label.offset_bottom = 88.0
-	_update_ritual_counter_ui()
+		_pumpkin_counter_label.visible = current_level_number >= 3
+	if _altar_progress_label != null:
+		_altar_progress_label.visible = true
+	update_objective_ui()
 
 
 func show_level_intro(level_number: int) -> void:
-	if current_level_number != level_number or level_number < 2 or _level_2_intro_layer != null:
+	if current_level_number != level_number or level_number < 1 or _level_2_intro_layer != null:
 		return
 	get_tree().paused = true
 	set_meta("level_2_intro_active", true)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	_level_2_intro_countdown = 5
+	countdown_time = _countdown_duration_for_level(level_number)
 	_level_2_intro_layer = CanvasLayer.new()
 	_level_2_intro_layer.name = "Level2IntroLayer"
 	_level_2_intro_layer.layer = 40
 	_level_2_intro_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_level_2_intro_layer)
 
-	var backdrop := ColorRect.new()
+	var backdrop := TextureRect.new()
 	backdrop.name = "Backdrop"
 	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.015, 0.01, 0.03, 0.88)
+	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
+	_apply_intro_gradient(backdrop)
 	_level_2_intro_layer.add_child(backdrop)
 
 	var panel := PanelContainer.new()
@@ -638,7 +770,7 @@ func show_level_intro(level_number: int) -> void:
 	panel.offset_bottom = 230.0
 	panel.process_mode = Node.PROCESS_MODE_ALWAYS
 	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.035, 0.025, 0.06, 0.99)
+	panel_style.bg_color = Color(0.035, 0.025, 0.06, 0.84)
 	panel_style.border_color = Color(0.24, 0.58, 0.95, 0.95)
 	panel_style.set_border_width_all(2)
 	panel_style.set_corner_radius_all(10)
@@ -656,53 +788,106 @@ func show_level_intro(level_number: int) -> void:
 	panel.add_child(layout)
 
 	var title := Label.new()
-	title.text = "¡NIVEL 2: LA PESADILLA EXTENDIDA!" if level_number == 2 else "¡NIVEL 3: EL RITUAL FINAL!"
+	match level_number:
+		1:
+			title.text = "¡NIVEL 1: EL CEMENTERIO OLVIDADO!"
+		2:
+			title.text = "¡NIVEL 2: PESADILLA DE MEDIANOCHE!"
+		3:
+			title.text = "¡NIVEL 3: COSECHA Y SACRIFICIO!"
+		_:
+			title.text = "¡NIVEL 4: EL RITUAL ABSOLUTO!"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	title.add_theme_font_size_override("font_size", 25)
 	title.add_theme_color_override("font_color", Color(0.65, 0.82, 1.0))
 	layout.add_child(title)
 
-	var instructions := Label.new()
-	if level_number == 2:
-		instructions.text = "NUEVA MECÁNICA: CRÁNEOS DE SALUD\n• Encuentra los cráneos en el suelo para recuperar 1 bloque de vida.\n• En el radar aparecerán marcados como un CUADRADO AZUL (■).\n• Si recoges los 3 cráneos, reaparecerán uno a uno cada 30 segundos."
-	else:
-		instructions.text = "MECÁNICA PRINCIPAL: LAS 7 CALABAZAS\n• Debes encontrar y recoger las 7 calabazas (● en el radar) usando la tecla 'E'.\n• Los altares permanecerán bloqueados hasta que reúnas todas las calabazas.\n• Recoge cráneos (■ azul) para curarte y mantente alerta de los 3 enemigos."
+	var instructions := RichTextLabel.new()
+	instructions.bbcode_enabled = true
+	instructions.scroll_active = false
+	instructions.fit_content = true
+	instructions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	match level_number:
+		1:
+			instructions.text = "MECÁNICA PRINCIPAL: ECO EN LOS ALTARES\n• Aprende a moverte en sigilo y enciende los 2 altares ([color=#FFAA00]◆[/color]) usando la tecla 'Q'.\n• Sigue el portón ([color=#00FF66]■[/color]) para escapar."
+		2:
+			instructions.text = "MECÁNICA PRINCIPAL: LUZ EN EL CAMINO\n• Encuentra cráneos ([color=#3399FF]■[/color]) en el suelo para recuperar 1 bloque de vida usando la tecla 'R'.\n• Si recoges los 3 cráneos ([color=#3399FF]■[/color]), reaparecerán uno a uno cada 30 segundos.\n• Se desactiva la curación pasiva. Mantente alerta de los 3 enemigos.\n• Enciende los 4 altares ([color=#FFAA00]◆[/color]) con la tecla 'Q' y sigue el portón ([color=#00FF66]■[/color]) para escapar."
+		3:
+			instructions.text = "MECÁNICA PRINCIPAL: CALABAZAS MALDITAS\n• Encuentra las 7 calabazas ([color=#FFA500]●[/color]) y arráncalas del suelo usando la tecla 'F'.\n• Los altares ([color=#FFAA00]◆[/color]) permanecerán bloqueados hasta que reúnas todas las calabazas.\n• Recoge cráneos ([color=#3399FF]■[/color]) con la tecla 'R' para curarte y mantente alerta de los 3 enemigos."
+		_:
+			instructions.text = "MECÁNICA PRINCIPAL: PROFANACIÓN Y UN ÚLTIMO ENJAMBRE\n• Reúne las 4 calabazas ([color=#FF8000]●[/color]) con la tecla 'F' para desbloquear los restos ([color=#FFB6C1]t[/color]).\n• Transporta los 2 restos ([color=#FFB6C1]t[/color]) frente al portón ([color=#40E0D0]#[/color]) con la tecla 'T' (velocidad reducida; solo podrás correr si te ha visto el enemigo).\n• Enciende los 4 altares ([color=#FFAA00]◆[/color]) con la tecla 'Q' para abrir la salida ([color=#00FF66]■[/color]).\n• Sobrevive a los 4 enemigos del enjambre."
 	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	instructions.add_theme_font_size_override("font_size", 17)
-	instructions.add_theme_color_override("font_color", Color(0.92, 0.89, 0.96))
+	instructions.add_theme_font_size_override("normal_font_size", 17)
+	instructions.add_theme_color_override("default_color", Color(0.92, 0.89, 0.96))
 	layout.add_child(instructions)
 
 	var countdown := Label.new()
 	countdown.name = "Countdown"
-	countdown.text = "El juego comienza en: 5..."
+	countdown.text = "El juego comienza en: %d..." % countdown_time
 	countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	countdown.add_theme_font_size_override("font_size", 22)
 	countdown.add_theme_color_override("font_color", Color(1.0, 0.78, 0.36))
+	countdown.process_mode = Node.PROCESS_MODE_ALWAYS
+	_level_2_intro_countdown_label = countdown
 	layout.add_child(countdown)
 
 	_level_2_intro_timer = Timer.new()
 	_level_2_intro_timer.name = "Level2IntroCountdownTimer"
 	_level_2_intro_timer.wait_time = 1.0
+	_level_2_intro_timer.one_shot = false
+	_level_2_intro_timer.autostart = false
+	_level_2_intro_timer.ignore_time_scale = true
+	_level_2_intro_timer.process_callback = Timer.TIMER_PROCESS_IDLE
 	_level_2_intro_timer.process_mode = Node.PROCESS_MODE_ALWAYS
 	_level_2_intro_layer.add_child(_level_2_intro_timer)
 	_level_2_intro_timer.timeout.connect(_on_level_2_intro_countdown)
-	_level_2_intro_timer.start()
+	_level_2_intro_timer.start(1.0)
+
+
+func _countdown_duration_for_level(level_number: int) -> int:
+	match level_number:
+		1:
+			return 5
+		2:
+			return 10
+		3, 4:
+			return 15
+	return 10
+
+
+func _apply_intro_gradient(background_rect: TextureRect) -> void:
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color("#050814"))
+	gradient.set_color(1, Color("#120919"))
+
+	var gradient_texture := GradientTexture2D.new()
+	gradient_texture.gradient = gradient
+	gradient_texture.fill_from = Vector2(0.5, 0.0)
+	gradient_texture.fill_to = Vector2(0.5, 1.0)
+	background_rect.texture = gradient_texture
 
 
 func _on_level_2_intro_countdown() -> void:
-	_level_2_intro_countdown -= 1
-	if _level_2_intro_countdown <= 0:
+	countdown_time -= 1
+	if countdown_time <= 0:
+		if is_instance_valid(_level_2_intro_countdown_label):
+			_level_2_intro_countdown_label.text = "El juego comienza en: 0..."
+		await RenderingServer.frame_post_draw
+		if not is_instance_valid(_level_2_intro_layer):
+			return
+		if _level_2_intro_timer != null:
+			_level_2_intro_timer.stop()
 		_level_2_intro_layer.queue_free()
 		_level_2_intro_layer = null
 		_level_2_intro_timer = null
+		_level_2_intro_countdown_label = null
 		set_meta("level_2_intro_active", false)
 		get_tree().paused = false
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		return
-	var countdown_label := get_node_or_null("Level2IntroLayer/Level2Announcement/VBoxContainer/Countdown") as Label
-	if countdown_label != null:
-		countdown_label.text = "El juego comienza en: %d..." % _level_2_intro_countdown
+	if is_instance_valid(_level_2_intro_countdown_label):
+		_level_2_intro_countdown_label.text = "El juego comienza en: %d..." % countdown_time
 
 
 func set_exit_gate_radar_target(target: Node3D, gate_is_open: bool = false) -> void:
@@ -752,8 +937,7 @@ func _update_ritual_radar_markers() -> void:
 			marker.visible = false
 			continue
 		var radar_center: Vector2 = _radar_arrow_area.size * 0.5
-		var angle: float = _radar_relative_angle(altar.global_position)
-		var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * 42.0
+		var marker_center: Vector2 = _world_to_radar_position(altar.global_position, radar_center)
 		marker.position = marker_center - marker.size * 0.5
 		marker.visible = true
 		if altar.is_lit:
@@ -779,8 +963,7 @@ func _update_exit_gate_radar_marker() -> void:
 		_radar_exit_gate_marker.visible = false
 		return
 	var radar_center: Vector2 = _radar_arrow_area.size * 0.5
-	var angle: float = _radar_relative_angle(_radar_exit_gate_target.global_position)
-	var marker_center: Vector2 = radar_center + Vector2(sin(angle), -cos(angle)) * 51.0
+	var marker_center: Vector2 = _world_to_radar_position(_radar_exit_gate_target.global_position, radar_center)
 	_radar_exit_gate_marker.position = marker_center - _radar_exit_gate_marker.size * 0.5
 	_radar_exit_gate_marker.visible = true
 	_radar_exit_gate_marker.modulate.a = 1.0
@@ -797,6 +980,14 @@ func _radar_relative_angle(world_position: Vector3) -> float:
 	toward_target = toward_target.normalized()
 	var cross_y: float = forward.cross(toward_target).dot(Vector3.UP)
 	return atan2(-cross_y, forward.dot(toward_target))
+
+
+func _world_to_radar_position(world_position: Vector3, radar_center: Vector2) -> Vector2:
+	var toward_target: Vector3 = world_position - global_position
+	toward_target.y = 0.0
+	var angle: float = _radar_relative_angle(world_position)
+	var radar_radius: float = clampf(toward_target.length() / 30.0 * 50.0, 5.0, 50.0)
+	return radar_center + Vector2(sin(angle), -cos(angle)) * radar_radius
 
 
 func _update_radar_alert_state(delta: float) -> void:
@@ -963,14 +1154,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotation.x = _pitch
 	if event.is_action_pressed("ritual_interact"):
 		_try_light_nearby_altar()
-	if event.is_action_pressed("interact"):
-		if current_level_number == 3 and _try_collect_nearby_pumpkin():
-			return
+	if event.is_action_pressed("absolute_ritual_interact"):
+		_try_interact_absolute_ritual_relic()
+	if event.is_action_pressed("health_skull_interact"):
+		_try_collect_nearby_health_skull()
+	if event.is_action_pressed("hide_interact"):
 		if is_hiding:
 			play_sound_effect(SFX_HIDE)
 			_set_hiding(false, null, true)
 		else:
 			_interact_with_target()
+	if event.is_action_pressed("interact"):
+		if current_level_number >= 3 and _try_collect_nearby_pumpkin():
+			return
+		_interact_with_collectible_target()
 
 
 func _try_collect_nearby_pumpkin() -> bool:
@@ -980,12 +1177,81 @@ func _try_collect_nearby_pumpkin() -> bool:
 	return bool(level_builder.call("try_collect_nearby_pumpkin", self))
 
 
+func _try_collect_nearby_health_skull() -> bool:
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("try_collect_nearby_health_skull"):
+		return false
+	return bool(level_builder.call("try_collect_nearby_health_skull", self))
+
+
+func _try_interact_absolute_ritual_relic() -> bool:
+	if current_level_number != 4:
+		return false
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("try_interact_absolute_ritual_relic"):
+		return false
+	var interacted: bool = bool(level_builder.call("try_interact_absolute_ritual_relic", self))
+	if interacted:
+		play_sound_effect(SFX_HEALTH_SKULL_PICKUP, false, 0.65)
+	return interacted
+
+
+func carry_absolute_ritual_relic(relic: Node3D) -> bool:
+	if current_level_number != 4 or is_carrying_absolute_ritual_relic or relic == null:
+		return false
+	var carry_anchor := get_node_or_null("AbsoluteRitualCarryAnchor") as Node3D
+	if carry_anchor == null:
+		carry_anchor = Node3D.new()
+		carry_anchor.name = "AbsoluteRitualCarryAnchor"
+		carry_anchor.position = Vector3(0.0, 0.15, -0.9)
+		add_child(carry_anchor)
+	relic.reparent(carry_anchor)
+	relic.position = Vector3(0.18, -0.22, 0.0)
+	relic.rotation = Vector3.ZERO
+	carried_absolute_ritual_relic = relic
+	is_carrying_absolute_ritual_relic = true
+	is_running = false
+	_update_crouch_state(false)
+	_set_carried_relic_visible(not is_hidden)
+	return true
+
+
+func release_absolute_ritual_relic() -> Node3D:
+	if not is_carrying_absolute_ritual_relic:
+		return null
+	var relic := carried_absolute_ritual_relic
+	if relic != null and is_instance_valid(relic):
+		_set_visual_tree_visible(relic.get_node_or_null("RelicVisual"), true)
+	carried_absolute_ritual_relic = null
+	is_carrying_absolute_ritual_relic = false
+	_update_crouch_state(Input.is_action_pressed("crouch"))
+	return relic
+
+
+func set_absolute_ritual_relic_progress(delivered: int, required: int) -> void:
+	total_absolute_ritual_relics = maxi(0, required)
+	absolute_ritual_relics_delivered = clampi(delivered, 0, total_absolute_ritual_relics)
+	_update_ritual_counter_ui()
+
+
+func _interact_with_collectible_target() -> void:
+	if interaction_ray == null or not interaction_ray.is_colliding():
+		return
+	var target := interaction_ray.get_collider()
+	if target != null and target.has_method("interact"):
+		target.interact(self)
+
+
 func collect_pumpkin() -> void:
-	if current_level_number != 3 or pumpkins_collected >= PUMPKINS_REQUIRED:
+	if current_level_number < 3 or pumpkins_collected >= _pumpkin_requirement_for_current_level():
 		return
 	pumpkins_collected += 1
 	play_sound_effect(SFX_PUMPKIN)
 	_update_ritual_counter_ui()
+
+
+func _pumpkin_requirement_for_current_level() -> int:
+	return FINAL_LEVEL_PUMPKINS_REQUIRED if current_level_number >= 4 else PUMPKINS_REQUIRED
 
 
 func _show_pumpkin_lock_message() -> void:
@@ -1009,7 +1275,10 @@ func _physics_process(delta: float) -> void:
 		_update_footstep_audio(false)
 		velocity = Vector3.ZERO
 		return
-	_update_crouch_state(Input.is_action_pressed("crouch"))
+	var wants_to_crouch: bool = Input.is_action_pressed("crouch")
+	if is_carrying_absolute_ritual_relic:
+		wants_to_crouch = false
+	_update_crouch_state(wants_to_crouch)
 
 	var input_vector := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if is_hiding:
@@ -1031,8 +1300,19 @@ func _physics_process(delta: float) -> void:
 	move_direction += -transform.basis.z * forward_strength
 	move_direction += transform.basis.z * backward_strength
 	move_direction = move_direction.normalized()
-	is_running = not is_crouching and input_vector.length_squared() > 0.0 and Input.is_action_pressed("sprint")
-	var current_speed := walk_speed * 0.5 if is_crouching else sprint_speed if is_running else walk_speed
+	var has_movement_input: bool = input_vector.length_squared() > 0.0
+	var sprint_requested: bool = Input.is_action_pressed("sprint")
+	var can_sprint_while_carrying: bool = is_carrying_absolute_ritual_relic and _is_any_enemy_chasing()
+	var can_sprint: bool = can_sprint_while_carrying if is_carrying_absolute_ritual_relic else not is_crouching
+	is_running = has_movement_input and sprint_requested and can_sprint
+	var current_speed: float = walk_speed
+	if is_carrying_absolute_ritual_relic:
+		# Carrying remains slower than standing, but is a little faster than crouch.
+		current_speed = sprint_speed if is_running else walk_speed * 0.7
+	elif is_crouching:
+		current_speed = walk_speed * 0.5
+	elif is_running:
+		current_speed = sprint_speed
 	velocity.x = move_direction.x * current_speed
 	velocity.z = move_direction.z * current_speed
 	if _knockback_time_remaining > 0.0:
@@ -1044,13 +1324,17 @@ func _physics_process(delta: float) -> void:
 		_knockback_time_remaining = maxf(0.0, _knockback_time_remaining - delta)
 
 	if is_on_floor():
-		velocity.y = jump_velocity if not is_crouching and not is_hiding and Input.is_action_just_pressed("jump") else 0.0
+		var can_jump_while_carrying: bool = is_carrying_absolute_ritual_relic
+		var jump_pressed: bool = Input.is_action_just_pressed("jump")
+		if jump_pressed and not is_hiding and (not is_crouching or can_jump_while_carrying):
+			velocity.y = jump_velocity
+		else:
+			velocity.y = 0.0
 	else:
 		velocity.y -= gravity * delta
 	move_and_slide()
 	var horizontal_motion: bool = absf(velocity.x) > 0.01 or absf(velocity.z) > 0.01
-	var shift_pressed: bool = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
-	_update_footstep_audio(is_on_floor() and horizontal_motion and shift_pressed)
+	_update_footstep_audio(is_on_floor() and horizontal_motion and is_running)
 	_update_noise(delta, input_vector.length_squared() > 0.0)
 
 
@@ -1076,11 +1360,12 @@ func _update_footstep_audio(should_play: bool) -> void:
 		walk_audio_player.stop()
 
 
-func play_sound_effect(stream: AudioStream, process_always: bool = false) -> void:
+func play_sound_effect(stream: AudioStream, process_always: bool = false, pitch_scale: float = 1.0) -> void:
 	if stream == null:
 		return
 	var audio_player := AudioStreamPlayer.new()
 	audio_player.stream = stream
+	audio_player.pitch_scale = maxf(pitch_scale, 0.01)
 	audio_player.process_mode = Node.PROCESS_MODE_ALWAYS if process_always else Node.PROCESS_MODE_INHERIT
 	var audio_parent: Node = get_tree().root if process_always else self
 	audio_parent.add_child(audio_player)
@@ -1187,65 +1472,206 @@ func _create_interaction_prompt() -> void:
 func _create_ritual_ui() -> void:
 	if _radar_layer == null:
 		return
+	_objective_container = VBoxContainer.new()
+	_objective_container.name = "ObjectiveList"
+	_objective_container.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_objective_container.offset_left = -720.0
+	_objective_container.offset_right = -28.0
+	_objective_container.offset_top = 18.0
+	_objective_container.offset_bottom = 250.0
+	_objective_container.alignment = BoxContainer.ALIGNMENT_BEGIN
+	_objective_container.add_theme_constant_override("separation", 2)
+	_objective_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_radar_layer.add_child(_objective_container)
+
+	var counter_font := SystemFont.new()
+	counter_font.font_names = PackedStringArray(["Arial"])
+	counter_font.font_weight = 700
+	_objective_counter_font = counter_font
+	var instruction_font := SystemFont.new()
+	instruction_font.font_names = PackedStringArray(["Georgia"])
+	instruction_font.font_weight = 500
+	_objective_instruction_font = instruction_font
+
 	_pumpkin_counter_label = RichTextLabel.new()
 	_pumpkin_counter_label.name = "PumpkinCounter"
 	_pumpkin_counter_label.bbcode_enabled = true
 	_pumpkin_counter_label.scroll_active = false
 	_pumpkin_counter_label.fit_content = false
-	_pumpkin_counter_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_pumpkin_counter_label.offset_left = -720.0
-	_pumpkin_counter_label.offset_right = -28.0
-	_pumpkin_counter_label.offset_top = 18.0
-	_pumpkin_counter_label.offset_bottom = 50.0
 	_pumpkin_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_pumpkin_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_pumpkin_counter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pumpkin_counter_label.add_theme_font_size_override("normal_font_size", 17)
-	_pumpkin_counter_label.add_theme_color_override("default_color", Color(1.0, 0.82, 0.62, 1.0))
+	_pumpkin_counter_label.custom_minimum_size = Vector2(0.0, 30.0)
+	_pumpkin_counter_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pumpkin_counter_label.add_theme_font_size_override("normal_font_size", 15)
+	_pumpkin_counter_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_pumpkin_counter_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
 	_pumpkin_counter_label.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
 	_pumpkin_counter_label.add_theme_constant_override("outline_size", 4)
 	_pumpkin_counter_label.visible = false
-	_radar_layer.add_child(_pumpkin_counter_label)
+
+	_absolute_ritual_title_label = RichTextLabel.new()
+	_absolute_ritual_title_label.name = "AbsoluteRitualMissionTitle"
+	_absolute_ritual_title_label.bbcode_enabled = true
+	_absolute_ritual_title_label.scroll_active = false
+	_absolute_ritual_title_label.fit_content = false
+	_absolute_ritual_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_absolute_ritual_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_absolute_ritual_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_absolute_ritual_title_label.custom_minimum_size = Vector2(0.0, 42.0)
+	_absolute_ritual_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_absolute_ritual_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_absolute_ritual_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_absolute_ritual_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
+	_absolute_ritual_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_absolute_ritual_title_label.add_theme_constant_override("outline_size", 5)
+	_absolute_ritual_title_label.visible = false
+
+	_absolute_ritual_progress_label = RichTextLabel.new()
+	_absolute_ritual_progress_label.name = "AbsoluteRitualProgress"
+	_absolute_ritual_progress_label.bbcode_enabled = true
+	_absolute_ritual_progress_label.scroll_active = false
+	_absolute_ritual_progress_label.fit_content = false
+	_absolute_ritual_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_absolute_ritual_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_absolute_ritual_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_absolute_ritual_progress_label.custom_minimum_size = Vector2(0.0, 30.0)
+	_absolute_ritual_progress_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_absolute_ritual_progress_label.add_theme_font_size_override("normal_font_size", 15)
+	_absolute_ritual_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_absolute_ritual_progress_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+	_absolute_ritual_progress_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_absolute_ritual_progress_label.add_theme_constant_override("outline_size", 4)
+	_absolute_ritual_progress_label.visible = false
 
 	_ritual_counter_label = Label.new()
 	_ritual_counter_label.name = "RitualCounter"
-	_ritual_counter_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_ritual_counter_label.offset_left = -720.0
-	_ritual_counter_label.offset_right = -28.0
-	_ritual_counter_label.offset_top = 24.0
-	_ritual_counter_label.offset_bottom = 60.0
 	_ritual_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ritual_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_ritual_counter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ritual_counter_label.custom_minimum_size = Vector2(0.0, 36.0)
+	_ritual_counter_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var settings := LabelSettings.new()
 	settings.font_size = 18
 	settings.font_color = Color(1.0, 0.78, 0.42, 0.98)
+	settings.font = _objective_counter_font
 	settings.outline_color = Color(0.02, 0.015, 0.025, 0.95)
 	settings.outline_size = 5
 	settings.shadow_color = Color(0.0, 0.0, 0.0, 0.8)
 	settings.shadow_size = 4
 	settings.shadow_offset = Vector2(1.0, 2.0)
 	_ritual_counter_label.label_settings = settings
-	_radar_layer.add_child(_ritual_counter_label)
 
 	_ritual_mission_label = RichTextLabel.new()
 	_ritual_mission_label.name = "MissionObjective"
 	_ritual_mission_label.bbcode_enabled = true
 	_ritual_mission_label.scroll_active = false
 	_ritual_mission_label.fit_content = false
-	_ritual_mission_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_ritual_mission_label.offset_left = -720.0
-	_ritual_mission_label.offset_right = -28.0
-	_ritual_mission_label.offset_top = 60.0
-	_ritual_mission_label.offset_bottom = 88.0
 	_ritual_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_ritual_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_ritual_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ritual_mission_label.custom_minimum_size = Vector2(0.0, 32.0)
+	_ritual_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_ritual_mission_label.add_theme_font_size_override("normal_font_size", 15)
-	_ritual_mission_label.add_theme_color_override("default_color", Color(0.55, 1.0, 0.62, 0.95))
+	_ritual_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_ritual_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
 	_ritual_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
 	_ritual_mission_label.add_theme_constant_override("outline_size", 4)
-	_radar_layer.add_child(_ritual_mission_label)
+
+	_altar_mission_title_label = RichTextLabel.new()
+	_altar_mission_title_label.name = "AltarMissionTitle"
+	_altar_mission_title_label.bbcode_enabled = true
+	_altar_mission_title_label.scroll_active = false
+	_altar_mission_title_label.fit_content = false
+	_altar_mission_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_altar_mission_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_altar_mission_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_altar_mission_title_label.custom_minimum_size = Vector2(0.0, 42.0)
+	_altar_mission_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_altar_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_altar_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_altar_mission_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
+	_altar_mission_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_altar_mission_title_label.add_theme_constant_override("outline_size", 5)
+	_altar_mission_title_label.visible = false
+
+	_altar_progress_label = RichTextLabel.new()
+	_altar_progress_label.name = "AltarProgress"
+	_altar_progress_label.bbcode_enabled = true
+	_altar_progress_label.scroll_active = false
+	_altar_progress_label.fit_content = false
+	_altar_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_altar_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_altar_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_altar_progress_label.custom_minimum_size = Vector2(0.0, 30.0)
+	_altar_progress_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_altar_progress_label.add_theme_font_size_override("normal_font_size", 15)
+	_altar_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_altar_progress_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+	_altar_progress_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_altar_progress_label.add_theme_constant_override("outline_size", 4)
+	_healing_mission_label = RichTextLabel.new()
+	_healing_mission_label.name = "HealingMission"
+	_healing_mission_label.bbcode_enabled = true
+	_healing_mission_label.scroll_active = false
+	_healing_mission_label.fit_content = false
+	_healing_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_healing_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_healing_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_healing_mission_label.custom_minimum_size = Vector2(0.0, 30.0)
+	_healing_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_healing_mission_label.add_theme_font_size_override("normal_font_size", 15)
+	_healing_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_healing_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+	_healing_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_healing_mission_label.add_theme_constant_override("outline_size", 4)
+	_healing_mission_label.visible = false
+
+	_escape_mission_title_label = RichTextLabel.new()
+	_escape_mission_title_label.name = "EscapeMissionTitle"
+	_escape_mission_title_label.bbcode_enabled = true
+	_escape_mission_title_label.scroll_active = false
+	_escape_mission_title_label.fit_content = false
+	_escape_mission_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_escape_mission_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_escape_mission_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_escape_mission_title_label.custom_minimum_size = Vector2(0.0, 42.0)
+	_escape_mission_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_escape_mission_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
+	_escape_mission_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
+	_escape_mission_title_label.visible = false
+
+	_escape_mission_label = RichTextLabel.new()
+	_escape_mission_label.name = "EscapeObjective"
+	_escape_mission_label.bbcode_enabled = true
+	_escape_mission_label.scroll_active = false
+	_escape_mission_label.fit_content = false
+	_escape_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_escape_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_escape_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_escape_mission_label.custom_minimum_size = Vector2(0.0, 32.0)
+	_escape_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_escape_mission_label.add_theme_font_size_override("normal_font_size", 15)
+	_escape_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
+	_escape_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+	_escape_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
+	_escape_mission_label.add_theme_constant_override("outline_size", 4)
+
+	_objective_container.add_child(_ritual_counter_label)
+	_objective_container.add_child(_ritual_mission_label)
+	_objective_container.add_child(_pumpkin_counter_label)
+	_objective_container.add_child(_absolute_ritual_title_label)
+	_objective_container.add_child(_absolute_ritual_progress_label)
+	_objective_container.add_child(_altar_mission_title_label)
+	_objective_container.add_child(_altar_progress_label)
+	_objective_container.add_child(_healing_mission_label)
+	_objective_container.add_child(_escape_mission_title_label)
+	_objective_container.add_child(_escape_mission_label)
+	_apply_objective_typography()
+
 	_pumpkin_lock_message = Label.new()
 	_pumpkin_lock_message.name = "PumpkinLockMessage"
 	_pumpkin_lock_message.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -1257,7 +1683,7 @@ func _create_ritual_ui() -> void:
 	_pumpkin_lock_message.offset_bottom = 174.0
 	_pumpkin_lock_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pumpkin_lock_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pumpkin_lock_message.text = "¡Debes recolectar las 7 calabazas antes de realizar los rituales!"
+	_pumpkin_lock_message.text = "¡Debes recolectar %d calabazas antes de realizar los rituales!" % _pumpkin_requirement_for_current_level()
 	_pumpkin_lock_message.add_theme_font_size_override("font_size", 18)
 	_pumpkin_lock_message.add_theme_color_override("font_color", Color(1.0, 0.72, 0.42, 1.0))
 	_pumpkin_lock_message.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
@@ -1271,7 +1697,45 @@ func _create_ritual_ui() -> void:
 	_pumpkin_lock_timer.wait_time = 2.5
 	_pumpkin_lock_timer.timeout.connect(_hide_pumpkin_lock_message)
 	_radar_layer.add_child(_pumpkin_lock_timer)
-	_update_ritual_counter_ui()
+	update_objective_ui()
+
+
+func _apply_objective_typography() -> void:
+	if _ritual_counter_label == null or _ritual_mission_label == null:
+		return
+	if current_level_number == 1 or current_level_number == 2:
+		_ritual_mission_label.add_theme_font_override("normal_font", _objective_counter_font)
+		_ritual_mission_label.add_theme_font_size_override("normal_font_size", 24)
+		_ritual_mission_label.add_theme_constant_override("outline_size", 5)
+		_ritual_mission_label.custom_minimum_size = Vector2(0.0, 42.0)
+		_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+		_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
+		_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
+		_altar_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
+		_altar_progress_label.add_theme_font_size_override("normal_font_size", 15)
+		_healing_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
+		_healing_mission_label.add_theme_font_size_override("normal_font_size", 15)
+		_escape_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
+		_escape_mission_label.add_theme_font_size_override("normal_font_size", 15)
+		return
+	_ritual_mission_label.custom_minimum_size = Vector2(0.0, 42.0)
+	_ritual_mission_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_ritual_mission_label.add_theme_font_size_override("normal_font_size", 24)
+	_ritual_mission_label.add_theme_constant_override("outline_size", 5)
+	_altar_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_altar_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_altar_mission_title_label.add_theme_constant_override("outline_size", 5)
+	_absolute_ritual_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_absolute_ritual_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_absolute_ritual_title_label.add_theme_constant_override("outline_size", 5)
+	_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
+	_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
+	_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
+	for objective in [_pumpkin_counter_label, _absolute_ritual_progress_label, _altar_progress_label, _healing_mission_label, _escape_mission_label]:
+		if objective == null:
+			continue
+		objective.add_theme_font_override("normal_font", _objective_instruction_font)
+		objective.add_theme_font_size_override("normal_font_size", 15)
 
 
 func _update_interaction_prompt() -> void:
@@ -1280,6 +1744,13 @@ func _update_interaction_prompt() -> void:
 	if _has_escaped:
 		_interaction_prompt.visible = false
 		return
+	var level_builder := get_parent()
+	if current_level_number == 4 and level_builder != null and level_builder.has_method("get_absolute_ritual_interaction_prompt"):
+		var relic_prompt: String = str(level_builder.call("get_absolute_ritual_interaction_prompt", self))
+		if not relic_prompt.is_empty():
+			_interaction_prompt.text = relic_prompt
+			_interaction_prompt.visible = true
+			return
 	if _exit_gate_nearby:
 		if can_escape_cemetery():
 			_interaction_prompt.text = "[SALIDA ABIERTA] Cruza el portón verde"
@@ -1293,9 +1764,24 @@ func _update_interaction_prompt() -> void:
 		return
 	var altar := _get_nearby_ritual_altar()
 	if altar != null:
-		_interaction_prompt.text = "[Q] Encender ritual"
+		if current_level_number == 4 and pumpkins_collected >= _pumpkin_requirement_for_current_level() and absolute_ritual_relics_delivered < total_absolute_ritual_relics:
+			_interaction_prompt.text = "[BLOQUEADO] Lleva los 2 restos frente al portón"
+		elif current_level_number >= 3 and pumpkins_collected < _pumpkin_requirement_for_current_level():
+			_interaction_prompt.text = "[BLOQUEADO] Reúne las %d calabazas" % _pumpkin_requirement_for_current_level()
+		else:
+			_interaction_prompt.text = "[Q] Encender ritual"
 		_interaction_prompt.visible = true
 		return
+	if current_level_number >= 3 and level_builder != null and level_builder.has_method("get_nearby_pumpkin"):
+		if level_builder.call("get_nearby_pumpkin", self, 2.0) != null:
+			_interaction_prompt.text = "[F] Recoger calabaza"
+			_interaction_prompt.visible = true
+			return
+	if current_level_number >= 2 and level_builder != null and level_builder.has_method("get_nearby_health_skull"):
+		if level_builder.call("get_nearby_health_skull", self, 2.0) != null:
+			_interaction_prompt.text = "[R] Recoger cráneo curativo"
+			_interaction_prompt.visible = true
+			return
 	_hiding_target = _get_hiding_cover_target()
 	_interaction_prompt.text = "[E] Esconderse detrás del objeto"
 	_interaction_prompt.visible = _hiding_target != null
@@ -1333,7 +1819,12 @@ func _try_light_nearby_altar() -> void:
 	var altar := _get_nearby_ritual_altar()
 	if altar == null:
 		return
-	if current_level_number == 3 and pumpkins_collected < PUMPKINS_REQUIRED:
+	if current_level_number >= 3 and pumpkins_collected < _pumpkin_requirement_for_current_level():
+		_pumpkin_lock_message.text = "¡Debes recolectar %d calabazas antes de realizar los rituales!" % _pumpkin_requirement_for_current_level()
+		_show_pumpkin_lock_message()
+		return
+	if current_level_number == 4 and absolute_ritual_relics_delivered < total_absolute_ritual_relics:
+		_pumpkin_lock_message.text = "Construye el ritual absoluto: lleva los 2 restos frente al portón."
 		_show_pumpkin_lock_message()
 		return
 	if not altar.activate():
@@ -1345,26 +1836,222 @@ func _try_light_nearby_altar() -> void:
 	if rituals_completed >= total_rituals_required:
 		play_sound_effect(SFX_EXIT_UNLOCK)
 		exit_unlocked = true
-		_update_ritual_counter_ui()
-		cemetery_exit_unlocked.emit()
+		if current_level_number == 4:
+			_start_final_purification_sequence()
+		else:
+			_update_ritual_counter_ui()
+			cemetery_exit_unlocked.emit()
+
+
+func _start_final_purification_sequence() -> void:
+	if _purification_sequence_active or _purification_sequence_finished:
+		return
+	_purification_sequence_active = true
+	controls_frozen = true
+	velocity = Vector3.ZERO
+	_purify_level_enemies()
+	_update_ritual_counter_ui()
+	# Notify the builder immediately so the gate opens during the purification effect.
+	cemetery_exit_unlocked.emit()
+	call_deferred("_run_final_purification_sequence")
+
+
+func _purify_level_enemies() -> void:
+	var enemies_to_purify: Array[Node3D] = []
+	for enemy_node in enemies:
+		if enemy_node != null and is_instance_valid(enemy_node) and not enemies_to_purify.has(enemy_node):
+			enemies_to_purify.append(enemy_node)
+	for node in get_tree().get_nodes_in_group("enemy"):
+		var group_enemy := node as Node3D
+		if group_enemy != null and is_instance_valid(group_enemy) and not enemies_to_purify.has(group_enemy):
+			enemies_to_purify.append(group_enemy)
+	for enemy_node in enemies_to_purify:
+		enemy_node.remove_from_group("enemy")
+		enemy_node.visible = false
+		enemy_node.set_process(false)
+		enemy_node.set_physics_process(false)
+		if enemy_node is CollisionObject3D:
+			var collision_object := enemy_node as CollisionObject3D
+			collision_object.collision_layer = 0
+			collision_object.collision_mask = 0
+		enemy_node.queue_free()
+	enemies.clear()
+
+
+func _run_final_purification_sequence() -> void:
+	var shake_tween := _create_purification_camera_shake(1.8)
+	await _fade_purification_flash_to(1.0, 1.0)
+	# Hold the full white frame until the 1.8 second shake has finished.
+	await get_tree().create_timer(0.8, true, false, true).timeout
+	await _fade_purification_flash_to(0.0, 1.0)
+	if shake_tween != null and shake_tween.is_running():
+		await shake_tween.finished
+	_purification_sequence_finished = true
+	_purification_sequence_active = false
+	controls_frozen = false
+	update_objective_ui()
+
+
+func _create_purification_camera_shake(duration: float) -> Tween:
+	if camera == null or not is_instance_valid(camera):
+		return null
+	if _camera_shake_tween != null and _camera_shake_tween.is_running():
+		_camera_shake_tween.kill()
+	var rest_position := _camera_rest_position()
+	var shake_tween := create_tween()
+	shake_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	var segment_count: int = maxi(1, ceili(duration / 0.06))
+	var segment_duration: float = duration / float(segment_count)
+	for _segment in range(segment_count):
+		var offset := Vector3(
+			randf_range(-0.045, 0.045),
+			randf_range(-0.035, 0.035),
+			0.0
+		)
+		shake_tween.tween_property(camera, "position", rest_position + offset, segment_duration)
+	shake_tween.tween_property(camera, "position", rest_position, 0.08)
+	_camera_shake_tween = shake_tween
+	return shake_tween
+
+
+func _fade_purification_flash_to(target_alpha: float, duration: float) -> void:
+	if _purification_flash_rect == null or not is_instance_valid(_purification_flash_rect):
+		return
+	if _purification_flash_tween != null and _purification_flash_tween.is_running():
+		_purification_flash_tween.kill()
+	_purification_flash_rect.visible = true
+	_purification_flash_tween = create_tween()
+	_purification_flash_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_purification_flash_tween.tween_property(_purification_flash_rect, "color:a", clampf(target_alpha, 0.0, 1.0), duration)
+	await _purification_flash_tween.finished
 
 
 func _update_ritual_counter_ui() -> void:
-	if _pumpkin_counter_label != null:
-		_pumpkin_counter_label.visible = current_level_number == 3
-		_pumpkin_counter_label.text = "Calabazas recolectadas: %d / %d ([color=%s]●[/color])" % [pumpkins_collected, PUMPKINS_REQUIRED, PUMPKIN_MARKER_COLOR_HEX]
+	update_objective_ui()
+
+
+func update_objective_ui() -> void:
+	if _objective_container == null:
+		return
+	_apply_objective_typography()
+	var altars_complete: bool = rituals_completed >= total_rituals_required
+	var pumpkin_requirement: int = _pumpkin_requirement_for_current_level()
+	var pumpkins_complete: bool = current_level_number < 3 or pumpkins_collected >= pumpkin_requirement
+	var absolute_relics_complete: bool = current_level_number != 4 or absolute_ritual_relics_delivered >= total_absolute_ritual_relics
+	var objectives_complete: bool = (
+		exit_unlocked
+		and altars_complete
+		and pumpkins_complete
+		and absolute_relics_complete
+		and (current_level_number != 4 or _purification_sequence_finished)
+	)
 	if _ritual_counter_label != null:
+		_ritual_counter_label.visible = false
 		if exit_unlocked:
 			_ritual_counter_label.text = "PORTÓN PRINCIPAL ABIERTO, ESCAPA!!!"
+			_ritual_counter_label.label_settings.font_color = Color(0.282, 1.0, 0.384, 1.0)
 		else:
 			_ritual_counter_label.text = "Rituales completados: %d / %d" % [rituals_completed, total_rituals_required]
+			_ritual_counter_label.label_settings.font_color = Color(1.0, 0.78, 0.42, 0.98)
+
 	if _ritual_mission_label != null:
-		if exit_unlocked and rituals_completed >= total_rituals_required:
-			_ritual_mission_label.text = "- Sigue el ([color=%s]■[/color]) para salir" % EXIT_GATE_MARKER_COLOR_HEX
-		elif current_level_number == 3 and pumpkins_collected < PUMPKINS_REQUIRED:
-			_ritual_mission_label.text = "- Reúne las 7 calabazas para desbloquear los altares"
+		_ritual_mission_label.visible = true
+		if current_level_number <= 2:
+			_ritual_mission_label.text = "Enciende los altares"
+			var altar_title_color: Color = Color(1.0, 0.78, 0.42, 1.0)
+			if altars_complete:
+				altar_title_color = Color(0.282, 1.0, 0.384, 1.0)
+			_ritual_mission_label.add_theme_color_override("default_color", altar_title_color)
 		else:
-			_ritual_mission_label.text = "- Enciende los altares ([color=%s]◆[/color])" % ALTAR_MARKER_COLOR_HEX
+			if current_level_number == 4:
+				_ritual_mission_label.text = "Reúne las %d calabazas para desbloquear los restos" % pumpkin_requirement
+			else:
+				_ritual_mission_label.text = "Reúne las %d calabazas para desbloquear los altares" % pumpkin_requirement
+			var pumpkin_title_color: Color = Color(1.0, 0.78, 0.42, 1.0)
+			if pumpkins_complete:
+				pumpkin_title_color = Color(0.282, 1.0, 0.384, 1.0)
+			_ritual_mission_label.add_theme_color_override("default_color", pumpkin_title_color)
+
+	if _altar_mission_title_label != null:
+		_altar_mission_title_label.visible = current_level_number >= 3 and pumpkins_complete and absolute_relics_complete
+		_altar_mission_title_label.text = "Enciende los altares"
+		var altar_phase_title_color: Color = Color(1.0, 0.78, 0.42, 1.0)
+		if altars_complete:
+			altar_phase_title_color = Color(0.282, 1.0, 0.384, 1.0)
+		_altar_mission_title_label.add_theme_color_override("default_color", altar_phase_title_color)
+
+	if _absolute_ritual_title_label != null:
+		_absolute_ritual_title_label.visible = current_level_number == 4 and pumpkins_complete
+		_absolute_ritual_title_label.text = "Construye el ritual absoluto"
+		var relic_title_color: Color = Color(1.0, 0.78, 0.42, 1.0)
+		if absolute_relics_complete:
+			relic_title_color = Color(0.282, 1.0, 0.384, 1.0)
+		_absolute_ritual_title_label.add_theme_color_override("default_color", relic_title_color)
+
+	if _absolute_ritual_progress_label != null:
+		_absolute_ritual_progress_label.text = "Lleva los restos ([color=%s]t[/color]) al punto ([color=%s]#[/color]): %d / %d" % [ABSOLUTE_RELIC_MARKER_COLOR_HEX, RITUAL_DELIVERY_MARKER_COLOR_HEX, absolute_ritual_relics_delivered, total_absolute_ritual_relics]
+		_absolute_ritual_progress_label.visible = current_level_number == 4 and pumpkins_complete and not absolute_relics_complete
+		_absolute_ritual_progress_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+
+	if _pumpkin_counter_label != null:
+		_pumpkin_counter_label.visible = current_level_number >= 3 and not pumpkins_complete
+		_pumpkin_counter_label.text = "Calabazas ([color=%s]●[/color]) recolectadas: %d / %d" % [PUMPKIN_MARKER_COLOR_HEX, pumpkins_collected, pumpkin_requirement]
+		_pumpkin_counter_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+
+	if _altar_progress_label != null:
+		_altar_progress_label.text = "Altares ([color=%s]◆[/color]) encendidos: %d / %d" % [ALTAR_MARKER_COLOR_HEX, rituals_completed, total_rituals_required]
+		var altar_phase_active: bool = current_level_number <= 2 or (current_level_number >= 3 and pumpkins_complete and absolute_relics_complete)
+		_altar_progress_label.visible = altar_phase_active and not altars_complete
+		var altar_progress_color: Color = Color(0.8, 0.8, 0.8, 1.0)
+		if altars_complete:
+			altar_progress_color = Color(0.282, 1.0, 0.384, 1.0)
+		_altar_progress_label.add_theme_color_override("default_color", altar_progress_color)
+
+	if _healing_mission_label != null:
+		_healing_mission_label.text = "Encuentra cráneos ([color=%s]■[/color]) para curarte" % SKULL_MARKER_COLOR_HEX
+		_healing_mission_label.visible = current_level_number == 2
+		_healing_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
+
+	if _escape_mission_title_label != null:
+		_escape_mission_title_label.text = "¡Escapa del cementerio!"
+		_escape_mission_title_label.visible = objectives_complete
+		_escape_mission_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
+
+	if _escape_mission_label != null:
+		if current_level_number == 4 and _purification_sequence_finished:
+			_escape_mission_label.text = "Sigue el portón ([color=%s]■[/color]) para salir" % EXIT_GATE_MARKER_COLOR_HEX
+		else:
+			_escape_mission_label.text = "Sigue el ([color=%s]■[/color]) para salir" % EXIT_GATE_MARKER_COLOR_HEX
+		_escape_mission_label.visible = objectives_complete
+		var escape_instruction_color: Color = Color(0.8, 0.8, 0.8, 1.0)
+		if _has_escaped and current_level_number < 4:
+			escape_instruction_color = Color(0.282, 1.0, 0.384, 1.0)
+		_escape_mission_label.add_theme_color_override("default_color", escape_instruction_color)
+
+	# Reafirma el orden de la misión, con la instrucción de salida al final.
+	var ordered_objectives: Array[Control] = []
+	if current_level_number <= 2:
+		ordered_objectives.append(_ritual_mission_label)
+		ordered_objectives.append(_altar_progress_label)
+		ordered_objectives.append(_healing_mission_label)
+		ordered_objectives.append(_escape_mission_title_label)
+		ordered_objectives.append(_escape_mission_label)
+		ordered_objectives.append(_ritual_counter_label)
+		ordered_objectives.append(_pumpkin_counter_label)
+	else:
+		ordered_objectives.append(_ritual_mission_label)
+		ordered_objectives.append(_pumpkin_counter_label)
+		ordered_objectives.append(_absolute_ritual_title_label)
+		ordered_objectives.append(_absolute_ritual_progress_label)
+		ordered_objectives.append(_altar_mission_title_label)
+		ordered_objectives.append(_altar_progress_label)
+		ordered_objectives.append(_escape_mission_title_label)
+		ordered_objectives.append(_escape_mission_label)
+		ordered_objectives.append(_ritual_counter_label)
+	for index in range(ordered_objectives.size()):
+		var objective: Control = ordered_objectives[index]
+		if objective != null and objective.get_parent() == _objective_container:
+			_objective_container.move_child(objective, index)
 
 
 func can_escape_cemetery() -> bool:
@@ -1380,30 +2067,39 @@ func escape_cemetery() -> void:
 	if _has_escaped or not can_escape_cemetery():
 		return
 	_has_escaped = true
+	update_objective_ui()
 	freeze_controls()
 	if _interaction_prompt != null:
 		_interaction_prompt.visible = false
 	for enemy_node in get_tree().get_nodes_in_group("enemy"):
 		if enemy_node.has_method("freeze_for_escape"):
 			enemy_node.call("freeze_for_escape")
-	if current_level_number < 3:
+	if current_level_number < 4:
 		_show_level_complete_screen()
 	else:
 		_show_final_victory_screen()
 
 
 func _show_level_complete_screen() -> void:
-	_show_escape_screen(
-		"¡NIVEL %d COMPLETADO!" % current_level_number,
-		"Sobreviviste a esta noche...",
-		true
-	)
+	var title_text: String
+	var description_text: String
+	match current_level_number:
+		1:
+			title_text = "¡HAS ESCAPADO DEL CEMENTERIO OLVIDADO!"
+			description_text = "Lograste encender los primeros altares y escapar de las sombras."
+		2:
+			title_text = "¡SOBREVIVISTE A LA PESADILLA DE MEDIANOCHE!"
+			description_text = "La luz de los craneos y altares te guió a través de la oscuridad."
+		_:
+			title_text = "¡COSECHA Y SACRIFICIO COMPLETADOS!"
+			description_text = "Las calabazas malditas han sido arrancadas de raíz y el portón se ha abierto."
+	_show_escape_screen(title_text, description_text, true)
 
 
 func _show_final_victory_screen() -> void:
 	_show_escape_screen(
-		"¡HAS ESCAPADO DEFINITIVAMENTE!",
-		"El cementerio queda atrás. Por fin estás a salvo.",
+		"¡EL RITUAL ABSOLUTO SE HA CUMPLIDO!",
+		"Has profanado las tumbas, desafiado al enjambre y escapado con vida.",
 		false
 	)
 
@@ -1568,8 +2264,37 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 		else:
 			_update_crouch_state(is_crouching)
 			_has_pre_hiding_transform = false
+	_set_carried_relic_visible(not is_hidden)
 	if _interaction_prompt != null:
 		_update_interaction_prompt()
+
+
+func _is_any_enemy_chasing() -> bool:
+	for enemy_node in enemies:
+		if enemy_node == null or not is_instance_valid(enemy_node):
+			continue
+		var enemy_state: Variant = enemy_node.get("state")
+		if enemy_state != null and int(enemy_state) == EnemyAI.State.CHASE:
+			return true
+	return false
+
+
+func _set_carried_relic_visible(should_be_visible: bool) -> void:
+	if carried_absolute_ritual_relic == null or not is_instance_valid(carried_absolute_ritual_relic):
+		return
+	var relic_visual: Node = carried_absolute_ritual_relic.get_node_or_null("RelicVisual")
+	if relic_visual == null:
+		relic_visual = carried_absolute_ritual_relic
+	_set_visual_tree_visible(relic_visual, should_be_visible)
+
+
+func _set_visual_tree_visible(node: Node, should_be_visible: bool) -> void:
+	if node == null:
+		return
+	if node is VisualInstance3D:
+		(node as VisualInstance3D).visible = should_be_visible
+	for child in node.get_children():
+		_set_visual_tree_visible(child, should_be_visible)
 
 
 func _move_into_cover() -> bool:
@@ -1702,6 +2427,7 @@ func collect_item(item_name: String) -> void:
 func set_hidden(hidden: bool) -> void:
 	_hidden_by_zone = hidden
 	is_hidden = _hidden_by_zone or is_hiding
+	_set_carried_relic_visible(not is_hidden)
 
 
 func orient_toward(world_target: Vector3) -> void:
@@ -1769,8 +2495,12 @@ func _ensure_input_actions() -> void:
 	_add_key_action("move_left", KEY_A)
 	_add_key_action("move_right", KEY_D)
 	_add_key_action("sprint", KEY_SHIFT)
-	_add_key_action("interact", KEY_E)
+	_remove_key_action("interact", KEY_E)
+	_add_key_action("interact", KEY_F)
+	_add_key_action("hide_interact", KEY_E)
+	_add_key_action("health_skull_interact", KEY_R)
 	_add_key_action("ritual_interact", KEY_Q)
+	_add_key_action("absolute_ritual_interact", KEY_T)
 	_add_key_action("jump", KEY_SPACE)
 	_add_key_action("crouch", KEY_CTRL)
 	_add_key_action("crouch", KEY_C)
@@ -1780,8 +2510,16 @@ func _add_key_action(action_name: StringName, key: Key) -> void:
 	if not InputMap.has_action(action_name):
 		InputMap.add_action(action_name)
 	for existing_event in InputMap.action_get_events(action_name):
-		if existing_event is InputEventKey and existing_event.physical_keycode == key:
+		if existing_event is InputEventKey and (existing_event.physical_keycode == key or existing_event.keycode == key):
 			return
 	var key_event = InputEventKey.new()
 	key_event.physical_keycode = key
 	InputMap.action_add_event(action_name, key_event)
+
+
+func _remove_key_action(action_name: StringName, key: Key) -> void:
+	if not InputMap.has_action(action_name):
+		return
+	for existing_event in InputMap.action_get_events(action_name):
+		if existing_event is InputEventKey and (existing_event.physical_keycode == key or existing_event.keycode == key):
+			InputMap.action_erase_event(action_name, existing_event)

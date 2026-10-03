@@ -4,6 +4,7 @@ const LEVEL_SCENE := "res://scenes/Level_01.tscn"
 const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click_menu.wav")
 
 var _title: Label
+var _vignette_material: ShaderMaterial
 
 
 func _ready() -> void:
@@ -15,28 +16,33 @@ func _ready() -> void:
 		if not music_player.playing:
 			music_player.play()
 	_build_interface()
+	var viewport := get_viewport()
+	if not viewport.size_changed.is_connected(_update_vignette_aspect):
+		viewport.size_changed.connect(_update_vignette_aspect)
 	_animate_title()
 
 
 func _build_interface() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var background := ColorRect.new()
+	var background := TextureRect.new()
 	background.name = "Background"
-	background.color = Color("0d0d0d")
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color("190B28"))
+	gradient.set_color(1, Color("0B0B0B"))
+	var gradient_texture := GradientTexture2D.new()
+	gradient_texture.gradient = gradient
+	gradient_texture.width = 2
+	gradient_texture.height = 512
+	gradient_texture.fill_from = Vector2(0.5, 0.0)
+	gradient_texture.fill_to = Vector2(0.5, 1.0)
+	background.texture = gradient_texture
+	background.stretch_mode = TextureRect.STRETCH_SCALE
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
 
-	var glow := ColorRect.new()
-	glow.name = "NightGlow"
-	glow.color = Color("1a0933")
-	glow.anchor_left = 0.0
-	glow.anchor_top = 0.0
-	glow.anchor_right = 1.0
-	glow.anchor_bottom = 0.55
-	glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(glow)
+	_add_vignette_overlay()
 
 	var layout := VBoxContainer.new()
 	layout.name = "MenuLayout"
@@ -64,11 +70,13 @@ func _build_interface() -> void:
 	_title.name = "GameTitle"
 	_title.text = "RESONANCE\nOF THE DARK"
 	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title.add_theme_color_override("font_color", Color("f2d5a0"))
-	_title.add_theme_color_override("font_shadow_color", Color("d95e27"))
-	_title.add_theme_constant_override("shadow_offset_x", 0)
-	_title.add_theme_constant_override("shadow_offset_y", 3)
-	_title.add_theme_font_size_override("font_size", 48)
+	var title_settings := LabelSettings.new()
+	title_settings.font_color = Color("f2d5a0")
+	title_settings.font_size = 48
+	title_settings.shadow_color = Color(0.015, 0.005, 0.025, 0.82)
+	title_settings.shadow_size = 9
+	title_settings.shadow_offset = Vector2(0.0, 4.0)
+	_title.label_settings = title_settings
 	layout.add_child(_title)
 
 	var subtitle := Label.new()
@@ -98,6 +106,39 @@ func _build_interface() -> void:
 	layout.add_child(footer)
 
 
+func _add_vignette_overlay() -> void:
+	var vignette_shader := Shader.new()
+	vignette_shader.code = """
+shader_type canvas_item;
+uniform vec4 vignette_color : source_color = vec4(0.008, 0.003, 0.016, 0.62);
+uniform float vignette_strength = 0.72;
+uniform float aspect_ratio = 1.7778;
+
+void fragment() {
+	vec2 centered_uv = (UV - vec2(0.5)) * vec2(aspect_ratio, 1.0);
+	float distance_from_center = length(centered_uv);
+	float edge_mask = smoothstep(0.42, 1.02, distance_from_center);
+	COLOR = vec4(vignette_color.rgb, edge_mask * vignette_color.a * vignette_strength);
+}
+"""
+	_vignette_material = ShaderMaterial.new()
+	_vignette_material.shader = vignette_shader
+	var vignette := ColorRect.new()
+	vignette.name = "EdgeVignette"
+	vignette.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vignette.material = _vignette_material
+	add_child(vignette)
+	_update_vignette_aspect()
+
+
+func _update_vignette_aspect() -> void:
+	if _vignette_material == null:
+		return
+	var viewport_size: Vector2 = get_viewport_rect().size
+	_vignette_material.set_shader_parameter("aspect_ratio", viewport_size.x / maxf(viewport_size.y, 1.0))
+
+
 func _make_button(label_text: String, highlighted: bool) -> Button:
 	var button := Button.new()
 	button.text = label_text
@@ -108,9 +149,15 @@ func _make_button(label_text: String, highlighted: bool) -> Button:
 	button.add_theme_color_override("font_color", Color("fff0d4"))
 	button.add_theme_color_override("font_hover_color", Color("ffffff"))
 	button.add_theme_color_override("font_pressed_color", Color("f2d5a0"))
+	button.add_theme_color_override("font_shadow_color", Color(0.01, 0.005, 0.02, 0.82))
+	button.add_theme_constant_override("shadow_offset_x", 0)
+	button.add_theme_constant_override("shadow_offset_y", 2)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color("58251f") if highlighted else Color("211a2b")
 	normal.border_color = Color("c77738") if highlighted else Color("66566f")
+	normal.shadow_color = Color(0.005, 0.002, 0.012, 0.72)
+	normal.shadow_size = 10
+	normal.shadow_offset = Vector2(0.0, 4.0)
 	normal.set_border_width_all(1)
 	normal.set_corner_radius_all(4)
 	normal.content_margin_top = 12.0
@@ -118,6 +165,8 @@ func _make_button(label_text: String, highlighted: bool) -> Button:
 	var hover := normal.duplicate() as StyleBoxFlat
 	hover.bg_color = Color("773426") if highlighted else Color("33253e")
 	hover.border_color = Color("f0a34c")
+	hover.shadow_size = 12
+	hover.shadow_offset = Vector2(0.0, 5.0)
 	button.add_theme_stylebox_override("normal", normal)
 	button.add_theme_stylebox_override("hover", hover)
 	button.add_theme_stylebox_override("pressed", hover)
