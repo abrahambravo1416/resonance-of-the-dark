@@ -69,6 +69,14 @@ func _build_interface() -> void:
 	_subtitle.add_theme_font_size_override("font_size", 18)
 	layout.add_child(_subtitle)
 
+	var penalty_line := Label.new()
+	penalty_line.name = "ScorePenalty"
+	penalty_line.text = "- 50 en puntuación final"
+	penalty_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	penalty_line.add_theme_color_override("font_color", Color("e6c7c3"))
+	penalty_line.add_theme_font_size_override("font_size", 16)
+	layout.add_child(penalty_line)
+
 	var spacer := Control.new()
 	spacer.custom_minimum_size.y = 12.0
 	layout.add_child(spacer)

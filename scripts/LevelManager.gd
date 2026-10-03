@@ -44,6 +44,7 @@ func _process(delta: float) -> void:
 
 func register_player(player: Node) -> void:
 	_player = player
+	get_node("/root/GameManager").begin_level_attempt()
 	_sync_level_index_with_scene()
 	seconds_left = LEVEL_DURATION_SECONDS
 	_timer_fraction = 0.0

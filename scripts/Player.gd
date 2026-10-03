@@ -2195,7 +2195,13 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 		_add_escape_summary_line(layout, "Puntos ganados: +%d" % _level_score_points)
 		_add_escape_summary_line(layout, "Puntuación Total: %d" % get_node("/root/GameManager").get("total_score"), true)
 	else:
-		_add_escape_summary_line(layout, "PUNTUACIÓN TOTAL: %d pts" % get_node("/root/GameManager").get("total_score"), true)
+		var game_manager: Node = get_node("/root/GameManager")
+		var deaths: int = int(game_manager.get("penalties_count"))
+		var death_label: String = "muerte total" if deaths == 1 else "muertes totales"
+		var penalty_points: int = int(game_manager.call("get_total_penalty_points"))
+		_add_escape_summary_line(layout, "%d %s: -%d puntos" % [deaths, death_label, penalty_points])
+		_add_escape_summary_line(layout, "Puntos ganados: +%d" % _level_score_points)
+		_add_escape_summary_line(layout, "PUNTUACIÓN TOTAL: %d pts" % game_manager.get("total_score"), true)
 		if _is_new_high_score:
 			_add_escape_summary_line(layout, "¡NUEVA MEJOR PUNTUACIÓN!", true)
 	if show_continue:

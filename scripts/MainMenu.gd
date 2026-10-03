@@ -115,6 +115,14 @@ func _build_interface() -> void:
 	footer.add_theme_font_size_override("font_size", 11)
 	layout.add_child(footer)
 
+	var score_penalty_hint := Label.new()
+	score_penalty_hint.name = "ScorePenaltyHint"
+	score_penalty_hint.text = "GAME OVER = -50 en puntuación final"
+	score_penalty_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	score_penalty_hint.add_theme_color_override("font_color", Color("746b7c"))
+	score_penalty_hint.add_theme_font_size_override("font_size", 11)
+	layout.add_child(score_penalty_hint)
+
 
 func _add_vignette_overlay() -> void:
 	var vignette_shader := Shader.new()
