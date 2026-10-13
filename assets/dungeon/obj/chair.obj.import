@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://dgwlmry6ix05q"
+path="res://.godot/imported/chair.obj-a72b65fe3c08dd8dbbc54105c3a52e3e.mesh"
+
+[deps]
+
+files=["res://.godot/imported/chair.obj-a72b65fe3c08dd8dbbc54105c3a52e3e.mesh"]
+
+source_file="res://assets/dungeon/obj/chair.obj"
+dest_files=["res://.godot/imported/chair.obj-a72b65fe3c08dd8dbbc54105c3a52e3e.mesh", "res://.godot/imported/chair.obj-a72b65fe3c08dd8dbbc54105c3a52e3e.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

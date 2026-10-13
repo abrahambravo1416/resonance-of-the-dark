@@ -26,6 +26,7 @@ const SFX_ENEMY_HIT: AudioStreamWAV = preload("res://audio/Efectos cortos/golpeo
 const SFX_EXIT_UNLOCK: AudioStreamWAV = preload("res://audio/Efectos cortos/desbloquear_salida.wav")
 const SFX_LOSE: AudioStreamWAV = preload("res://audio/Efectos cortos/lose.wav")
 const SFX_WALK: AudioStreamWAV = preload("res://audio/Efectos cortos/caminar.wav")
+const TRANSITION_SKIP_INPUT_SCRIPT: Script = preload("res://scripts/TransitionSkipInput.gd")
 
 @export_group("References")
 @export var camera: Camera3D
@@ -78,6 +79,7 @@ const SFX_WALK: AudioStreamWAV = preload("res://audio/Efectos cortos/caminar.wav
 
 var is_hidden: bool = false
 var is_hiding: bool = false
+var breath_label: Label
 var current_cover_type: String = ""
 var is_running: bool = false
 var is_crouching: bool = false
@@ -108,6 +110,11 @@ var _hiding_collision_point: Vector3 = Vector3.ZERO
 var _hiding_collision_normal: Vector3 = Vector3.ZERO
 var _has_pre_hiding_transform: bool = false
 var _hiding_approach_tween: Tween
+var _hiding_camera_tween: Tween
+var _hiding_collision_was_disabled: bool = false
+var _breath_time_remaining: float = 5.0
+var _hiding_overlay_layer: CanvasLayer
+var _hiding_overlay: ColorRect
 var _cover_transition_active: bool = false
 var _knockback_velocity: Vector3 = Vector3.ZERO
 var _knockback_time_remaining: float = 0.0
@@ -194,6 +201,7 @@ func _ready() -> void:
 		interaction_ray.collide_with_areas = true
 	_configure_hiding_ray()
 	_create_interaction_prompt()
+	_create_breath_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if get_node_or_null("/root/LevelManager") != null:
 		LevelManager.register_player(self)
@@ -204,6 +212,12 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_update_threat_radar(delta)
 	_update_interaction_prompt()
+	if is_hiding:
+		_breath_time_remaining = maxf(0.0, _breath_time_remaining - delta)
+		if breath_label != null:
+			breath_label.text = "Aguantando la respiración  %d..." % ceili(_breath_time_remaining)
+	if is_hiding and is_zero_approx(_breath_time_remaining):
+		_set_hiding(false, null, true)
 	if is_dead or current_health >= max_health or current_level_number >= 2:
 		_regeneration_timer = 0.0
 		return
@@ -754,6 +768,7 @@ func show_level_intro(level_number: int) -> void:
 	_level_2_intro_layer.layer = 40
 	_level_2_intro_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_level_2_intro_layer)
+	_add_transition_skip_input(_level_2_intro_layer)
 
 	var backdrop := TextureRect.new()
 	backdrop.name = "Backdrop"
@@ -763,6 +778,22 @@ func show_level_intro(level_number: int) -> void:
 	backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
 	_apply_intro_gradient(backdrop)
 	_level_2_intro_layer.add_child(backdrop)
+
+	var skip_hint := Label.new()
+	skip_hint.name = "SkipHint"
+	skip_hint.text = "Presiona ENTER para saltar"
+	skip_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	skip_hint.offset_left = -360.0
+	skip_hint.offset_top = -48.0
+	skip_hint.offset_right = -28.0
+	skip_hint.offset_bottom = -16.0
+	skip_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	skip_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	skip_hint.add_theme_color_override("font_color", Color("#CCCCCC"))
+	skip_hint.add_theme_font_size_override("font_size", 14)
+	skip_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	skip_hint.process_mode = Node.PROCESS_MODE_ALWAYS
+	_level_2_intro_layer.add_child(skip_hint)
 
 	var panel := PanelContainer.new()
 	panel.name = "Level2Announcement"
@@ -871,6 +902,20 @@ func _apply_intro_gradient(background_rect: TextureRect) -> void:
 	background_rect.texture = gradient_texture
 
 
+func _finish_level_intro() -> void:
+	if _level_2_intro_layer == null or not is_instance_valid(_level_2_intro_layer):
+		return
+	if _level_2_intro_timer != null:
+		_level_2_intro_timer.stop()
+	_level_2_intro_layer.queue_free()
+	_level_2_intro_layer = null
+	_level_2_intro_timer = null
+	_level_2_intro_countdown_label = null
+	set_meta("level_2_intro_active", false)
+	get_tree().paused = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 func _on_level_2_intro_countdown() -> void:
 	countdown_time -= 1
 	if countdown_time <= 0:
@@ -879,15 +924,7 @@ func _on_level_2_intro_countdown() -> void:
 		await RenderingServer.frame_post_draw
 		if not is_instance_valid(_level_2_intro_layer):
 			return
-		if _level_2_intro_timer != null:
-			_level_2_intro_timer.stop()
-		_level_2_intro_layer.queue_free()
-		_level_2_intro_layer = null
-		_level_2_intro_timer = null
-		_level_2_intro_countdown_label = null
-		set_meta("level_2_intro_active", false)
-		get_tree().paused = false
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_finish_level_intro()
 		return
 	if is_instance_valid(_level_2_intro_countdown_label):
 		_level_2_intro_countdown_label.text = "El juego comienza en: %d..." % countdown_time
@@ -1048,7 +1085,7 @@ func _update_pursuit_music(is_chasing: bool) -> void:
 
 
 func take_damage(amount: int = 1) -> void:
-	if is_dead or amount <= 0:
+	if is_dead or is_hiding or _cover_transition_active or amount <= 0:
 		return
 	var previous_health := current_health
 	current_health = maxi(0, current_health - amount)
@@ -1075,12 +1112,8 @@ func update_health_ui() -> void:
 
 
 func apply_knockback(impact_position: Vector3) -> void:
-	if is_dead:
+	if is_dead or is_hiding or _cover_transition_active:
 		return
-	if is_hiding:
-		_set_hiding(false)
-	elif _cover_transition_active:
-		_cancel_cover_transition()
 	var direction: Vector3 = global_position - impact_position
 	direction.y = 0.0
 	if direction.length_squared() < 0.0001:
@@ -1149,6 +1182,20 @@ func _die() -> void:
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	player_died.emit()
+
+
+func _add_transition_skip_input(parent: Node) -> void:
+	var skip_input: Node = TRANSITION_SKIP_INPUT_SCRIPT.new()
+	skip_input.name = "TransitionSkipInput"
+	parent.add_child(skip_input)
+	skip_input.connect("skip_requested", _on_transition_skip_requested)
+
+
+func _on_transition_skip_requested() -> void:
+	if _level_2_intro_layer != null and is_instance_valid(_level_2_intro_layer):
+		_finish_level_intro()
+	elif _victory_screen_layer != null and is_instance_valid(_victory_screen_layer) and current_level_number < 4:
+		_continue_to_next_level()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1293,10 +1340,7 @@ func _physics_process(delta: float) -> void:
 			_update_footstep_audio(false)
 			velocity = Vector3.ZERO
 			return
-		velocity.x = 0.0
-		velocity.z = 0.0
-		velocity.y = 0.0 if is_on_floor() else -gravity * delta
-		move_and_slide()
+		velocity = Vector3.ZERO
 		_update_footstep_audio(false)
 		_update_noise(delta, false)
 		return
@@ -1473,6 +1517,75 @@ func _create_interaction_prompt() -> void:
 	prompt_settings.shadow_offset = Vector2(1.0, 2.0)
 	_interaction_prompt.label_settings = prompt_settings
 	_radar_layer.add_child(_interaction_prompt)
+
+
+func _create_breath_hud() -> void:
+	if _radar_layer == null:
+		return
+	_hiding_overlay_layer = CanvasLayer.new()
+	_hiding_overlay_layer.name = "HidingVisionOverlay"
+	_hiding_overlay_layer.layer = 5
+	_hiding_overlay_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_hiding_overlay_layer)
+	var overlay_root := Control.new()
+	overlay_root.name = "OverlayRoot"
+	overlay_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hiding_overlay_layer.add_child(overlay_root)
+	_hiding_overlay = ColorRect.new()
+	_hiding_overlay.name = "DarkenedView"
+	_hiding_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_hiding_overlay.color = Color(0.015, 0.02, 0.03, 0.3)
+	_hiding_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay_root.add_child(_hiding_overlay)
+	for edge in ["Top", "Bottom", "Left", "Right"]:
+		var vignette_edge := ColorRect.new()
+		vignette_edge.name = "Vignette" + edge
+		vignette_edge.color = Color(0.0, 0.005, 0.012, 0.24)
+		vignette_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		match edge:
+			"Top":
+				vignette_edge.anchor_right = 1.0
+				vignette_edge.offset_bottom = 78.0
+			"Bottom":
+				vignette_edge.anchor_left = 0.0
+				vignette_edge.anchor_top = 1.0
+				vignette_edge.anchor_right = 1.0
+				vignette_edge.anchor_bottom = 1.0
+				vignette_edge.offset_top = -78.0
+			"Left":
+				vignette_edge.anchor_bottom = 1.0
+				vignette_edge.offset_right = 64.0
+			"Right":
+				vignette_edge.anchor_left = 1.0
+				vignette_edge.anchor_top = 0.0
+				vignette_edge.anchor_right = 1.0
+				vignette_edge.anchor_bottom = 1.0
+				vignette_edge.offset_left = -64.0
+		overlay_root.add_child(vignette_edge)
+	_hiding_overlay_layer.visible = false
+
+	breath_label = Label.new()
+	breath_label.name = "BreathLabel"
+	breath_label.text = "Aguantando la respiración  5..."
+	breath_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	breath_label.anchor_left = 0.5
+	breath_label.anchor_right = 0.5
+	breath_label.anchor_top = 1.0
+	breath_label.anchor_bottom = 1.0
+	breath_label.offset_left = -220.0
+	breath_label.offset_right = 220.0
+	breath_label.offset_top = -104.0
+	breath_label.offset_bottom = -78.0
+	breath_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	breath_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	breath_label.add_theme_font_size_override("font_size", 14)
+	breath_label.add_theme_color_override("font_color", Color(0.72, 0.86, 0.92, 0.82))
+	breath_label.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.03, 0.95))
+	breath_label.add_theme_constant_override("outline_size", 3)
+	breath_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	breath_label.visible = false
+	_radar_layer.add_child(breath_label)
 
 
 func _create_ritual_ui() -> void:
@@ -2124,6 +2237,8 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	_victory_screen_layer.layer = 30
 	_victory_screen_layer.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_victory_screen_layer)
+	if show_continue:
+		_add_transition_skip_input(_victory_screen_layer)
 
 	var full_screen := Control.new()
 	full_screen.name = "EscapeTransitionScreen"
@@ -2137,6 +2252,21 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	backdrop.color = Color(0.015, 0.01, 0.025, 0.9)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
 	full_screen.add_child(backdrop)
+	if show_continue:
+		var skip_hint := Label.new()
+		skip_hint.name = "SkipHint"
+		skip_hint.text = "Presiona ENTER para saltar"
+		skip_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		skip_hint.offset_left = -360.0
+		skip_hint.offset_top = -48.0
+		skip_hint.offset_right = -28.0
+		skip_hint.offset_bottom = -16.0
+		skip_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		skip_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		skip_hint.add_theme_color_override("font_color", Color("#CCCCCC"))
+		skip_hint.add_theme_font_size_override("font_size", 14)
+		skip_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		full_screen.add_child(skip_hint)
 
 	var panel := PanelContainer.new()
 	panel.name = "EscapePanel"
@@ -2274,16 +2404,31 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 			return
 		_has_pre_hiding_transform = true
 		is_hiding = true
+		var player_collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
+		if player_collision != null:
+			_hiding_collision_was_disabled = player_collision.disabled
+			player_collision.disabled = true
 		is_running = false
 		_hiding_target = target
 		current_cover_type = "leaf_tree" if _is_leaf_tree_cover(target) else "object"
 		is_hidden = _hidden_by_zone or is_hiding
+		_breath_time_remaining = 5.0
+		if _hiding_overlay_layer != null:
+			_hiding_overlay_layer.visible = true
+		if breath_label != null:
+			breath_label.text = "Aguantando la respiración  5..."
+			breath_label.visible = true
 		_update_crouch_state(is_crouching)
 		if not _move_into_cover():
 			is_hiding = false
 			current_cover_type = ""
 			_hiding_target = null
 			is_hidden = _hidden_by_zone
+			_restore_hiding_collision()
+			if _hiding_overlay_layer != null:
+				_hiding_overlay_layer.visible = false
+			if breath_label != null:
+				breath_label.visible = false
 			_has_pre_hiding_transform = false
 			_update_crouch_state(is_crouching)
 		else:
@@ -2293,17 +2438,51 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 			return
 		_cancel_cover_transition()
 		is_hiding = false
+		if _hiding_overlay_layer != null:
+			_hiding_overlay_layer.visible = false
+		if breath_label != null:
+			breath_label.visible = false
 		current_cover_type = ""
 		_hiding_target = null
-		is_hidden = _hidden_by_zone
 		if restore_position and _has_pre_hiding_transform:
 			_restore_from_cover()
 		else:
+			is_hidden = _hidden_by_zone
+			_restore_hiding_collision()
 			_update_crouch_state(is_crouching)
+			_tween_hiding_camera(false)
 			_has_pre_hiding_transform = false
 	_set_carried_relic_visible(not is_hidden)
 	if _interaction_prompt != null:
 		_update_interaction_prompt()
+
+
+func _restore_hiding_collision() -> void:
+	var player_collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if player_collision != null:
+		player_collision.disabled = _hiding_collision_was_disabled
+	_hiding_collision_was_disabled = false
+
+
+func _tween_hiding_camera(entering: bool, duration: float = 0.2) -> void:
+	if camera == null or not is_instance_valid(camera):
+		return
+	if _hiding_camera_tween != null and _hiding_camera_tween.is_running():
+		_hiding_camera_tween.kill()
+	var target_position := _camera_base_position
+	if entering:
+		target_position.y = _camera_base_position.y * hiding_camera_height_ratio - 0.08
+		target_position.z += 0.12
+	elif is_crouching:
+		target_position.y *= 0.5
+	var target_rotation := Vector3(_pitch, 0.0, 0.0)
+	if entering:
+		target_rotation.x = clampf(_pitch + deg_to_rad(2.0), deg_to_rad(-85.0), deg_to_rad(85.0))
+	_hiding_camera_tween = create_tween()
+	_hiding_camera_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	_hiding_camera_tween.set_parallel(true)
+	_hiding_camera_tween.tween_property(camera, "position", target_position, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_hiding_camera_tween.tween_property(camera, "rotation", target_rotation, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 func _is_any_enemy_chasing() -> bool:
@@ -2365,6 +2544,7 @@ func _move_into_cover() -> bool:
 	if not position_is_clear:
 		return false
 	_cover_transition_active = true
+	_tween_hiding_camera(true)
 	_hiding_approach_tween = create_tween()
 	_hiding_approach_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	_hiding_approach_tween.set_parallel(true)
@@ -2374,6 +2554,7 @@ func _move_into_cover() -> bool:
 
 
 func _restore_from_cover() -> void:
+	_update_crouch_state(Input.is_action_pressed("crouch"))
 	var directions: Array[Vector3] = []
 	var view_basis: Basis = global_transform.basis
 	if camera != null and is_instance_valid(camera):
@@ -2409,10 +2590,11 @@ func _restore_from_cover() -> void:
 	if not found_clear_position:
 		destination = global_position
 	_cover_transition_active = true
+	_tween_hiding_camera(false, 0.3)
 	_hiding_approach_tween = create_tween()
 	_hiding_approach_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	_hiding_approach_tween.set_parallel(true)
-	_hiding_approach_tween.tween_property(self, "global_position", destination, cover_approach_duration).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_hiding_approach_tween.tween_property(self, "global_position", destination, 0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_hiding_approach_tween.finished.connect(_finish_cover_transition)
 	_has_pre_hiding_transform = false
 
@@ -2453,7 +2635,15 @@ func _cancel_cover_transition() -> void:
 func _finish_cover_transition() -> void:
 	_cover_transition_active = false
 	velocity = Vector3.ZERO
+	if not is_hiding:
+		is_hidden = _hidden_by_zone
+		_restore_hiding_collision()
+		_set_carried_relic_visible(not is_hidden)
+		if breath_label != null:
+			breath_label.visible = false
 	_update_crouch_state(Input.is_action_pressed("crouch"))
+	if _interaction_prompt != null:
+		_update_interaction_prompt()
 
 
 func collect_item(item_name: String) -> void:
@@ -2517,13 +2707,13 @@ func _update_crouch_state(wants_to_crouch: bool) -> void:
 		var target_height := collision_height * (0.5 if should_lower_posture else 1.0)
 		capsule.height = maxf(target_height, target_radius * 2.0)
 		collision.position.y = -(collision_height - capsule.height) * 0.5 if should_lower_posture else 0.0
-	if camera != null:
+	if camera != null and (_hiding_camera_tween == null or not _hiding_camera_tween.is_running()):
 		var camera_ratio: float = 1.0
 		if is_crouching:
 			camera_ratio = 0.5
 		if is_hiding:
 			camera_ratio = minf(camera_ratio, hiding_camera_height_ratio)
-		camera.position.y = _standing_camera_height * camera_ratio
+		camera.position.y = _standing_camera_height * camera_ratio - (0.08 if is_hiding else 0.0)
 
 
 func _ensure_input_actions() -> void:

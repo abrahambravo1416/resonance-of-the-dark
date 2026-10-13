@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bxarpldjq3nnt"
+path="res://.godot/imported/banner_patternC_yellow.obj-331df9ade0f309960df08bc28e3a4bab.mesh"
+
+[deps]
+
+files=["res://.godot/imported/banner_patternC_yellow.obj-331df9ade0f309960df08bc28e3a4bab.mesh"]
+
+source_file="res://assets/dungeon/obj/banner_patternC_yellow.obj"
+dest_files=["res://.godot/imported/banner_patternC_yellow.obj-331df9ade0f309960df08bc28e3a4bab.mesh", "res://.godot/imported/banner_patternC_yellow.obj-331df9ade0f309960df08bc28e3a4bab.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

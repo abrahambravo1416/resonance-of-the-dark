@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://dk8dsp6y1iygm"
+path="res://.godot/imported/arrow_B.obj-f9a8c58bcd23b5f748fe76ea624a8029.mesh"
+
+[deps]
+
+files=["res://.godot/imported/arrow_B.obj-f9a8c58bcd23b5f748fe76ea624a8029.mesh"]
+
+source_file="res://assets/weapons/obj/arrow_B.obj"
+dest_files=["res://.godot/imported/arrow_B.obj-f9a8c58bcd23b5f748fe76ea624a8029.mesh", "res://.godot/imported/arrow_B.obj-f9a8c58bcd23b5f748fe76ea624a8029.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

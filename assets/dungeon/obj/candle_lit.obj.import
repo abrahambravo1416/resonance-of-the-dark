@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://bjb8pf3k8c6an"
+path="res://.godot/imported/candle_lit.obj-dd535b9e285cb4a1bdc3bd84f63cdae0.mesh"
+
+[deps]
+
+files=["res://.godot/imported/candle_lit.obj-dd535b9e285cb4a1bdc3bd84f63cdae0.mesh"]
+
+source_file="res://assets/dungeon/obj/candle_lit.obj"
+dest_files=["res://.godot/imported/candle_lit.obj-dd535b9e285cb4a1bdc3bd84f63cdae0.mesh", "res://.godot/imported/candle_lit.obj-dd535b9e285cb4a1bdc3bd84f63cdae0.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false
