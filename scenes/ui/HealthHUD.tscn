@@ -1,0 +1,142 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/HealthHUD.gd" id="1_ngui3"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ypked"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mmtat"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t6xr7"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_12d3t"]
+content_margin_left = 3.0
+content_margin_top = 3.0
+content_margin_right = 3.0
+content_margin_bottom = 3.0
+bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[node name="HealthHUD" type="CanvasLayer" unique_id=965605390]
+layer = 5
+script = ExtResource("1_ngui3")
+
+[node name="HealthHUD" type="Control" parent="." unique_id=153271004]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="HealthContainer" type="VBoxContainer" parent="HealthHUD" unique_id=323875284]
+layout_mode = 0
+offset_left = 28.0
+offset_top = 26.0
+offset_right = 28.0
+offset_bottom = 26.0
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="@Label@30" type="Label" parent="HealthHUD/HealthContainer" unique_id=79625872]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8862745, 0.78039217, 0.64705884, 1)
+theme_override_font_sizes/font_size = 14
+text = "VIDA"
+
+[node name="HealthBlocks" type="HBoxContainer" parent="HealthHUD/HealthContainer" unique_id=1543286037]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 7
+
+[node name="HealthBlock1" type="PanelContainer" parent="HealthHUD/HealthContainer/HealthBlocks" unique_id=2099710555]
+custom_minimum_size = Vector2(34, 18)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_ypked")
+
+[node name="Fill" type="ColorRect" parent="HealthHUD/HealthContainer/HealthBlocks/HealthBlock1" unique_id=458393933]
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.8509804, 0.2901961, 0.23921569, 1)
+
+[node name="HealthBlock2" type="PanelContainer" parent="HealthHUD/HealthContainer/HealthBlocks" unique_id=422437562]
+custom_minimum_size = Vector2(34, 18)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_mmtat")
+
+[node name="Fill" type="ColorRect" parent="HealthHUD/HealthContainer/HealthBlocks/HealthBlock2" unique_id=2059201133]
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.8509804, 0.2901961, 0.23921569, 1)
+
+[node name="HealthBlock3" type="PanelContainer" parent="HealthHUD/HealthContainer/HealthBlocks" unique_id=1006896370]
+custom_minimum_size = Vector2(34, 18)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_t6xr7")
+
+[node name="Fill" type="ColorRect" parent="HealthHUD/HealthContainer/HealthBlocks/HealthBlock3" unique_id=501425427]
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.8509804, 0.2901961, 0.23921569, 1)
+
+[node name="HealthBlock4" type="PanelContainer" parent="HealthHUD/HealthContainer/HealthBlocks" unique_id=1016323445]
+custom_minimum_size = Vector2(34, 18)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_12d3t")
+
+[node name="Fill" type="ColorRect" parent="HealthHUD/HealthContainer/HealthBlocks/HealthBlock4" unique_id=991191768]
+layout_mode = 2
+mouse_filter = 2
+color = Color(0.8509804, 0.2901961, 0.23921569, 1)

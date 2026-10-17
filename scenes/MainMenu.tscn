@@ -1,19 +1,253 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="1_main_menu"]
-[ext_resource type="AudioStream" path="res://audio/musica_de_menu.ogg" id="2_menu_music"]
+[ext_resource type="Script" path="res://scripts/MainMenu.gd" id="1_iwbf0"]
+[ext_resource type="AudioStream" path="res://audio/musica_de_menu.ogg" id="2_2ysvc"]
+[ext_resource type="AudioStream" path="res://audio/Efectos cortos/click_menu.wav" id="3_xpiny"]
 
-[node name="MainMenu" type="Control"]
+[sub_resource type="Gradient" id="Gradient_bhu4a"]
+colors = PackedColorArray(0.09803922, 0.043137256, 0.15686275, 1, 0.043137256, 0.043137256, 0.043137256, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_e2per"]
+gradient = SubResource("Gradient_bhu4a")
+width = 2
+height = 512
+fill_from = Vector2(0.5, 0)
+fill_to = Vector2(0.5, 1)
+
+[sub_resource type="Shader" id="Shader_7mi0g"]
+code = "
+shader_type canvas_item;
+uniform vec4 vignette_color : source_color = vec4(0.008, 0.003, 0.016, 0.62);
+uniform float vignette_strength = 0.72;
+uniform float aspect_ratio = 1.7778;
+
+void fragment() {
+	vec2 centered_uv = (UV - vec2(0.5)) * vec2(aspect_ratio, 1.0);
+	float distance_from_center = length(centered_uv);
+	float edge_mask = smoothstep(0.42, 1.02, distance_from_center);
+	COLOR = vec4(vignette_color.rgb, edge_mask * vignette_color.a * vignette_strength);
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_nqjyj"]
+shader = SubResource("Shader_7mi0g")
+shader_parameter/vignette_color = null
+shader_parameter/vignette_strength = null
+shader_parameter/aspect_ratio = 1.0
+
+[sub_resource type="LabelSettings" id="LabelSettings_7vr37"]
+font_size = 48
+font_color = Color(0.9490196, 0.8352941, 0.627451, 1)
+shadow_size = 9
+shadow_color = Color(0.015, 0.005, 0.025, 0.82)
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kncl5"]
+content_margin_top = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.34509805, 0.14509805, 0.12156863, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.78039217, 0.46666667, 0.21960784, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0.005, 0.002, 0.012, 0.72)
+shadow_size = 10
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_clp4r"]
+content_margin_top = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.46666667, 0.20392157, 0.14901961, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0.005, 0.002, 0.012, 0.72)
+shadow_size = 12
+shadow_offset = Vector2(0, 5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ee60a"]
+content_margin_top = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.12941177, 0.101960786, 0.16862746, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.4, 0.3372549, 0.43529412, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0.005, 0.002, 0.012, 0.72)
+shadow_size = 10
+shadow_offset = Vector2(0, 4)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qjd48"]
+content_margin_top = 12.0
+content_margin_bottom = 12.0
+bg_color = Color(0.2, 0.14509805, 0.24313726, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+shadow_color = Color(0.005, 0.002, 0.012, 0.72)
+shadow_size = 12
+shadow_offset = Vector2(0, 5)
+
+[node name="MainMenu" type="Control" unique_id=1331645627]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_main_menu")
+script = ExtResource("1_iwbf0")
 
-[node name="MenuMusicPlayer" type="AudioStreamPlayer" parent="."]
+[node name="MenuMusicPlayer" type="AudioStreamPlayer" parent="." unique_id=129547040]
 process_mode = 3
-stream = ExtResource("2_menu_music")
+stream = ExtResource("2_2ysvc")
 volume_db = -8.0
 autoplay = true
+
+[node name="Background" type="TextureRect" parent="." unique_id=77644856]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+texture = SubResource("GradientTexture2D_e2per")
+
+[node name="EdgeVignette" type="ColorRect" parent="." unique_id=257366588]
+material = SubResource("ShaderMaterial_nqjyj")
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="MenuLayout" type="VBoxContainer" parent="." unique_id=222937033]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -320.0
+offset_right = 260.0
+offset_bottom = 320.0
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="@Label@3" type="Label" parent="MenuLayout" unique_id=1985212293]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7607843, 0.54509807, 0.27058825, 1)
+theme_override_font_sizes/font_size = 16
+text = "✦  UNA NOCHE DE PENUMBRA  ✦"
+horizontal_alignment = 1
+
+[node name="GameTitle" type="Label" parent="MenuLayout" unique_id=1931701823]
+layout_mode = 2
+text = "RESONANCE
+OF THE DARK"
+label_settings = SubResource("LabelSettings_7vr37")
+horizontal_alignment = 1
+
+[node name="@Label@4" type="Label" parent="MenuLayout" unique_id=1702933894]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6627451, 0.6117647, 0.6862745, 1)
+theme_override_font_sizes/font_size = 13
+text = "EL SILENCIO TAMBIÉN TE ESCUCHA"
+horizontal_alignment = 1
+
+[node name="HighScore" type="Label" parent="MenuLayout" unique_id=270053253]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
+theme_override_font_sizes/font_size = 16
+text = "MEJOR PUNTUACIÓN: 0"
+horizontal_alignment = 1
+
+[node name="@Control@5" type="Control" parent="MenuLayout" unique_id=1563472167]
+custom_minimum_size = Vector2(0, 8)
+layout_mode = 2
+
+[node name="PlayerAlias" type="LineEdit" parent="MenuLayout" unique_id=609039099]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+placeholder_text = "Tu nombre (opcional)"
+max_length = 48
+
+[node name="PlayButton" type="Button" parent="MenuLayout" unique_id=1850486039]
+custom_minimum_size = Vector2(280, 54)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_pressed_color = Color(0.9490196, 0.8352941, 0.627451, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_kncl5")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_clp4r")
+theme_override_styles/hover = SubResource("StyleBoxFlat_clp4r")
+text = "JUGAR"
+
+[node name="SkipMenuButton" type="Button" parent="MenuLayout" unique_id=1930149987]
+custom_minimum_size = Vector2(280, 54)
+layout_mode = 2
+tooltip_text = "Comenzar con las mismas misiones, sin esperar la introducción."
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_pressed_color = Color(0.9490196, 0.8352941, 0.627451, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_kncl5")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_clp4r")
+theme_override_styles/hover = SubResource("StyleBoxFlat_clp4r")
+text = "SALTAR MENÚ"
+
+[node name="ExitButton" type="Button" parent="MenuLayout" unique_id=2102481485]
+custom_minimum_size = Vector2(280, 54)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_pressed_color = Color(0.9490196, 0.8352941, 0.627451, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 18
+theme_override_styles/normal = SubResource("StyleBoxFlat_ee60a")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_qjd48")
+theme_override_styles/hover = SubResource("StyleBoxFlat_qjd48")
+text = "SALIR"
+
+[node name="@Label@8" type="Label" parent="MenuLayout" unique_id=980028974]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45490196, 0.41960785, 0.4862745, 1)
+theme_override_font_sizes/font_size = 11
+text = "WASD MOVER  ·  SHIFT CORRER  ·  CTRL AGACHAR  ·  E/Q INTERACTUAR"
+horizontal_alignment = 1
+
+[node name="ScorePenaltyHint" type="Label" parent="MenuLayout" unique_id=159160784]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.45490196, 0.41960785, 0.4862745, 1)
+theme_override_font_sizes/font_size = 11
+text = "GAME OVER = -50 en puntuación final"
+horizontal_alignment = 1
+
+[node name="LocalLogNotice" type="Label" parent="MenuLayout" unique_id=1562326377]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.6627451, 0.6117647, 0.6862745, 1)
+theme_override_font_sizes/font_size = 12
+text = "Registro local de partidas · consulta en localhost:8765"
+horizontal_alignment = 1
+
+[node name="MenuClick" type="AudioStreamPlayer" parent="." unique_id=1901737542]
+process_mode = 3
+stream = ExtResource("3_xpiny")

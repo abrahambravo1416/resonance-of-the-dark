@@ -1,0 +1,33 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/NarrativePoint.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/halloween/gltf/plaque_candles.gltf" id="2"]
+
+[node name="Memory" type="Node3D" node_paths=PackedStringArray("visual", "marker")]
+script = ExtResource("1")
+encounter_type = "memory"
+encounter_id = "lucia_memory"
+display_name = "La carta de Lucía"
+lines = Array[String](["«Si alguien encuentra esto: la oscuridad recuerda cada paso. Dejé una luz por quienes no lograron salir.» — Lucía"])
+visual = NodePath("Visual")
+marker = NodePath("Name")
+
+[node name="Visual" parent="." instance=ExtResource("2")]
+scale = Vector3(0.6, 0.6, 0.6)
+
+[node name="Glow" type="OmniLight3D" parent="."]
+position = Vector3(0, 0.6, 0)
+light_color = Color(0.95, 0.66, 0.3, 1)
+light_energy = 0.3
+omni_range = 1.8
+
+[node name="Name" type="Label3D" parent="."]
+position = Vector3(0, 0.9, 0)
+billboard = 1
+modulate = Color(1, 0.8, 0.5, 1)
+font_size = 21
+outline_size = 4
+pixel_size = 0.005
+text = "Memoria"
+
+[editable path="Visual"]

@@ -1,0 +1,246 @@
+"use strict";
+
+const $ = id => document.getElementById(id);
+const Replay = ResonanceReplay;
+const sampleKinds = Replay.samples;
+const playerSampleKinds = Replay.playerSamples;
+const enemyColors = {patrol:"#a8a1df", investigate:"#d8b879", chase:"#ed8f85"};
+const enemyStates = {patrol:"Patrulla", investigate:"Investiga", chase:"Persigue"};
+const labels = {
+  session_started:"Comienza la partida", session_ended:"Termina la partida", level_started:"Entra al nivel",
+  level_completed:"Nivel completado", player_damaged:"Recibe daño", player_healed:"Recupera vida",
+  player_died:"El jugador ha muerto", player_death:"El jugador ha muerto", player_respawned:"Vuelve a aparecer",
+  item_collected:"Recoge un objeto", collectible_collected:"Recoge un coleccionable", pumpkin_collected:"Recoge una calabaza",
+  bone_collected:"Recoge restos", altar_activated:"Enciende un altar", ritual_completed:"Completa un ritual",
+  mission_completed:"Misión completada", quest_completed:"Misión completada", mission_started:"Comienza una misión",
+  npc_interacted:"Habla con un personaje", npc_dialogue:"Conversación", npc_talked:"Habla con un personaje",
+  hiding_started:"Entra a un escondite", hiding_ended:"Sale del escondite", hide_started:"Entra a un escondite", hide_ended:"Sale del escondite",
+  crouch_started:"Se agacha", crouch_ended:"Se incorpora", sprint_started:"Empieza a correr", sprint_ended:"Deja de correr",
+  flashlight_toggled:"Cambia la linterna", flashlight_on:"Enciende la linterna", flashlight_off:"Apaga la linterna",
+  item_used:"Usa un objeto", battery_used:"Recarga la linterna", healing_used:"Usa una curación",
+  enemy_state_changed:"Un enemigo cambia de conducta", enemy_attack:"Ataque enemigo", player_attacked:"El jugador ataca",
+  paused:"Pausa la partida", resumed:"Reanuda la partida", menu_skipped:"Salta el menú", menu_started:"Abre el menú",
+  ambient_event:"Suceso ambiental", world_event:"Suceso en el nivel", collectible_found:"Encuentra un coleccionable",
+  position_sample:"Posición del jugador", position:"Posición del jugador", player_position:"Posición del jugador", movement_sample:"Posición del jugador",
+  intro_skipped:"Salta la introducción", intro_shown:"Lee la introducción", intro_finished:"Termina la introducción",
+  damage_taken:"Recibe daño", health_restored:"Recupera vida", relic_picked_up:"Levanta restos para el ritual",
+  relic_released:"Suelta los restos", jumped:"Salta", campaign_completed:"Completa la campaña",
+  hiding_zone_entered:"Entra en una zona de ocultación", hiding_zone_left:"Sale de una zona de ocultación",
+  hide_exit_completed:"Termina de salir del escondite", enemy_position_sample:"Posición del enemigo", enemy_removed:"El enemigo deja el nivel",
+  memory_collected:"Encuentra un recuerdo", npc_spoken:"Habla con un personaje",
+};
+const outcomeNames = {quit:"Salida del juego",finished:"Partida terminada",completed:"Completada",game_over:"Fin de la partida",window_closed:"Ventana cerrada",application_closed:"Juego cerrado",returned_to_menu:"Regresó al menú",new_run:"Inició otra partida",verification_complete:"Verificación terminada"};
+const state = {sessions:[], selected:null, record:null, cursor:0, followEnd:true, playing:false, shown:100, zoom:1, pan:{x:0,y:0}, dragging:null, bounds:null, refreshBusy:false};
+const node = (tag, className, text) => {const el = document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
+const label = kind => labels[kind] || kind.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
+const date = stamp => new Date(stamp*1000);
+const formatDate = stamp => date(stamp).toLocaleDateString("es-MX", {day:"2-digit",month:"short",year:"numeric"});
+const formatHour = stamp => date(stamp).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit",hour12:false});
+function clock(seconds){const n=Math.max(0,Math.floor(seconds));return n>=3600?`${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`:`${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;}
+function duration(seconds){return seconds>=3600?`${Math.floor(seconds/3600)} h ${Math.floor(seconds/60)%60} min`:seconds>=60?`${Math.floor(seconds/60)} min ${Math.floor(seconds)%60} s`:`${Math.floor(seconds)} s`;}
+const getAttempt = event => String(event.data?.attempt ?? 0);
+function setConnection(online){$("connection").classList.toggle("offline",!online);$("connection").replaceChildren(node("i"),document.createTextNode(online?"Archivo conectado":"Sin conexión"));}
+async function api(path){const response=await fetch(path,{cache:"no-store"});if(!response.ok)throw Error("No se pudo leer el archivo de partidas. Comprueba que el servidor siga abierto.");return response.json();}
+function showError(message){$("error").textContent=message;$("error").hidden=!message;}
+async function refresh(){
+  if(state.refreshBusy)return;
+  state.refreshBusy=true;
+  try {
+    const [result,health]=await Promise.all([api("/api/sessions"),api("/api/health")]);
+    state.sessions=result.sessions;
+    setConnection(health.ok);
+    showError(health.rejected_lines?`${health.rejected_lines} línea(s) del registro no pudieron importarse. Los eventos válidos siguen disponibles.`:health.ingestion_error?"La importación encontró un problema. Revisa la terminal del servidor.":"");
+    if(!state.selected && state.sessions.length)state.selected=state.sessions[0].session_id;
+    renderSessions();
+    if(state.selected)await loadSelected(false);
+    else {$("welcome").hidden=false;$("detail").hidden=true;}
+  } catch(error){setConnection(false);showError(error.message);}
+  finally{state.refreshBusy=false;}
+}
+function renderSessions(){
+  $("session-count").textContent=String(state.sessions.length);
+  const query=$("search").value.trim().toLocaleLowerCase();
+  const sessions=state.sessions.filter(item=>`${item.player_name} ${item.session_id} ${formatDate(item.started_at)}`.toLocaleLowerCase().includes(query));
+  const fragment=document.createDocumentFragment();
+  for(const session of sessions){
+    const button=node("button",`session-card${session.session_id===state.selected?" selected":""}`);button.type="button";button.setAttribute("aria-pressed",String(session.session_id===state.selected));
+    const top=node("span","card-top");top.append(node("span",null,formatDate(session.started_at)),node("span",`status-dot ${session.status}`,session.status==="active"?"● En curso":session.status==="finished"?"Finalizada":"Sin actividad"));
+    button.append(top,node("strong",null,session.player_name||"Explorador"),node("small",null,`${formatHour(session.started_at)} · ${duration(session.duration)} · ${session.action_count} acciones`));
+    button.addEventListener("click",async()=>{state.selected=session.session_id;state.record=null;state.playing=false;state.followEnd=true;state.shown=100;renderSessions();try{await loadSelected(true);}catch(error){showError(error.message);}});
+    fragment.append(button);
+  }
+  if(!sessions.length)fragment.append(node("p","no-results",query?"No hay partidas que coincidan.":"Aquí aparecerán tus partidas."));
+  $("sessions").replaceChildren(fragment);
+}
+function fillSelect(element,entries,emptyLabel,preferred){
+  const old=preferred ?? element.value;
+  element.replaceChildren(node("option",null,emptyLabel));element.firstChild.value="all";
+  for(const [value,title] of entries){const option=node("option",null,title);option.value=String(value);element.append(option);}
+  element.value=[...element.options].some(option=>option.value===String(old))?String(old):"all";
+}
+async function loadSelected(reset){
+  const selected=state.selected;
+  const result=await api(`/api/sessions/${encodeURIComponent(selected)}`);
+  if(selected!==state.selected)return;
+  const first=state.record===null || reset;
+  const unchanged=!first && state.record.session.event_count===result.session.event_count && state.record.session.last_seen===result.session.last_seen && state.record.session.status===result.session.status;
+  state.record=result;
+  // Keep expanded event details and keyboard focus while nothing has changed.
+  if(unchanged)return;
+  $("welcome").hidden=true;$("detail").hidden=false;
+  const s=result.session;
+  $("session-date").textContent=`PARTIDA DEL ${formatDate(s.started_at).toLocaleUpperCase()} · ${formatHour(s.started_at)}`;
+  $("session-title").textContent=s.player_name||"Explorador";
+  $("session-meta").textContent=`Último registro: ${formatHour(s.last_seen)} · ID ${s.session_id}`;
+  $("session-status").textContent=s.status==="active"?"● En curso":s.status==="finished"?(outcomeNames[s.outcome]||"Finalizada"):"Sin actividad reciente";
+  $("session-status").className=`badge ${s.status}`;
+  $("duration").textContent=duration(s.duration);$("distance").textContent=`${s.distance.toLocaleString("es-MX",{maximumFractionDigits:1})} m`;
+  $("actions").textContent=s.action_count.toLocaleString("es-MX");$("levels").textContent=String(s.level_count);
+  $("export").href=`/api/export/${encodeURIComponent(s.session_id)}?format=csv`;
+  const levels=[...new Set(result.events.map(event=>event.level).filter(level=>level>0))].sort((a,b)=>a-b);
+  fillSelect($("level"),levels.map(level=>[level,`Nivel ${level}`]),"Todos los niveles",first?"all":undefined);
+  fillAttempts(first);
+  const kinds=[...new Set(result.events.map(event=>event.kind))].filter(kind=>!sampleKinds.has(kind)).sort((a,b)=>label(a).localeCompare(label(b)));
+  fillSelect($("kind"),kinds.map(kind=>[kind,label(kind)]),"Todas las acciones",first?"all":undefined);
+  $("cursor").max=String(Math.max(s.duration,.1));
+  if(state.followEnd)state.cursor=s.duration;
+  if(first){state.zoom=1;state.pan={x:0,y:0};}
+  updateCursor();renderTimeline();drawMap();
+}
+function fillAttempts(reset=false){
+  if(!state.record)return;
+  const matching=state.record.events.filter(event=>$("level").value==="all"||String(event.level)===$("level").value);
+  const attempts=[...new Set(matching.map(getAttempt))].filter(attempt=>attempt!=="0").sort((a,b)=>Number(a)-Number(b));
+  fillSelect($("attempt"),attempts.map(attempt=>[attempt,`Intento ${attempt}`]),"Todos los intentos",reset?"all":undefined);
+}
+function filteredEvents(){return (state.record?.events||[]).filter(event=>($("level").value==="all"||String(event.level)===$("level").value)&&($("attempt").value==="all"||getAttempt(event)===$("attempt").value));}
+function activityEvents(){return filteredEvents().filter(event=>($("samples").checked||!sampleKinds.has(event.kind))&&($("kind").value==="all"||event.kind===$("kind").value));}
+function describe(event){
+  const d=event.data||{};
+  if(event.kind==="session_started")return d.game_version?`Versión ${d.game_version}`:"";
+  if(event.kind==="session_ended")return outcomeNames[d.outcome]||d.outcome||"";
+  if(event.kind==="level_started")return d.title||d.scene||"";
+  if(event.kind==="enemy_state_changed" || event.kind==="enemy_position_sample")return `${d.enemy||d.enemy_id||"Enemigo"} · ${enemyStates[d.state]||d.state||""}`;
+  if(event.kind==="mission_completed")return {pumpkins:"Reunir calabazas",altars:"Encender los altares",relics:"Llevar restos al ritual"}[d.mission]||d.mission||"";
+  if(sampleKinds.has(event.kind))return [d.running?"Corriendo":"Caminando",d.hidden?"Oculto":"",d.crouching?"Agachado":"",d.health!==undefined?`Vida ${d.health}`:""].filter(Boolean).join(" · ");
+  return [d.item||d.item_name||d.npc||d.npc_name||d.title||d.name||d.node||d.object||d.cover||"",d.message||d.text||d.dialogue||d.line||"",d.collected!==undefined?`Reunidos: ${d.collected}${d.required!==undefined?` / ${d.required}`:""}`:"",d.amount!==undefined?`Cantidad: ${d.amount}`:"",d.damage!==undefined?`Daño: ${d.damage}`:"",d.health!==undefined?`Vida: ${d.health}`:""].filter(Boolean).map(String).join(" · ");
+}
+function symbol(kind){if(kind.includes("damage")||kind.includes("died")||kind.includes("death"))return"×";if(kind.includes("collect")||kind.includes("item"))return"◇";if(kind.includes("altar")||kind.includes("ritual"))return"✧";if(kind.includes("npc")||kind.includes("dialogue"))return"◌";if(kind.includes("hide")||kind.includes("hiding"))return"◐";if(sampleKinds.has(kind))return"·";return"↗";}
+function renderTimeline(){
+  const events=activityEvents();
+  $("event-count").textContent=`${events.length.toLocaleString("es-MX")} registros`;
+  const fragment=document.createDocumentFragment();
+  for(const event of events.slice(0,state.shown)){
+    const row=node("article","event-row");const timeButton=node("button","event-time",clock(event.elapsed));timeButton.title="Ver este momento en el recorrido";
+    timeButton.addEventListener("click",()=>{state.followEnd=false;state.playing=false;state.cursor=event.elapsed;updateCursor();drawMap();});
+    const copy=node("div","event-copy");copy.append(node("strong",null,label(event.kind)));const description=describe(event);if(description)copy.append(node("p",null,description));
+    const detail=node("details");detail.append(node("summary",null,"Ver datos del evento"),node("pre",null,JSON.stringify({tipo:event.kind,posicion:event.position,datos:event.data},null,2)));copy.append(detail);
+    row.append(timeButton,node("span","event-symbol",symbol(event.kind)),copy,node("span","event-level",event.level?`NIVEL ${event.level}`:"MENÚ"));fragment.append(row);
+  }
+  if(!events.length)fragment.append(node("p","no-results","No hay acciones para estos filtros. Prueba otro nivel o actividad."));
+  $("timeline").replaceChildren(fragment);$("more").hidden=events.length<=state.shown;
+}
+function updateCursor(){
+  $("cursor").value=String(state.cursor);$("cursor-time").textContent=clock(state.cursor);$("total-time").textContent=clock(state.record?.session.duration||0);
+  $("play").textContent=state.playing?"Ⅱ":"▶";$("play").setAttribute("aria-label",state.playing?"Pausar recorrido":"Reproducir recorrido");
+}
+function mapBounds(events){
+  const starts=events.filter(event=>event.kind==="level_started"&&event.data?.map_bounds);
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const event of starts){const b=event.data.map_bounds;if([b.min_x,b.max_x,b.min_z,b.max_z].every(Number.isFinite)){minX=Math.min(minX,b.min_x);maxX=Math.max(maxX,b.max_x);minZ=Math.min(minZ,b.min_z);maxZ=Math.max(maxZ,b.max_z);}}
+  for(const event of events){if(sampleKinds.has(event.kind)&&event.position){minX=Math.min(minX,event.position.x);maxX=Math.max(maxX,event.position.x);minZ=Math.min(minZ,event.position.z);maxZ=Math.max(maxZ,event.position.z);}}
+  if(!Number.isFinite(minX))return {minX:-10,maxX:10,minZ:-10,maxZ:10};
+  const pad=Math.max(2,Math.max(maxX-minX,maxZ-minZ)*.08);return {minX:minX-pad,maxX:maxX+pad,minZ:minZ-pad,maxZ:maxZ+pad};
+}
+function drawMap(){
+  const canvas=$("map");const rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return;
+  const dpr=window.devicePixelRatio||1;canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
+  const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+  const replay=Replay.at(state.record?.events||[],state.cursor,{level:$("level").value,attempt:$("attempt").value});
+  const w=rect.width,h=rect.height,events=replay.events,samples=events.filter(event=>playerSampleKinds.has(event.kind)&&event.position);
+  const b=mapBounds(events);state.bounds=b;
+  const scale=Math.min((w-66)/Math.max(b.maxX-b.minX,1),(h-56)/Math.max(b.maxZ-b.minZ,1))*state.zoom;
+  const centerX=(b.minX+b.maxX)/2,centerZ=(b.minZ+b.maxZ)/2;
+  const xy=p=>({x:w/2+(p.x-centerX)*scale+state.pan.x,y:h/2+(p.z-centerZ)*scale+state.pan.y});
+  $("map-empty").hidden=!!replay.player || replay.enemies.length>0;
+  $("map-points").textContent=`${samples.length} ${samples.length===1?"posición":"posiciones"} del jugador`;
+  $("map-context").textContent=replay.context?`Nivel ${replay.context.level} · Intento ${replay.context.attempt}${replay.paused?" · En pausa":""}`:"Sin nivel en este momento";
+  const hidden=replay.player?.hidden;
+  $("player-state").classList.toggle("is-hidden",!!hidden);
+  $("player-state").textContent=replay.player?(hidden?"◐ Oculto":"● Visible"):"Sin posición";
+  $("player-state").title=hidden?(replay.player.cover||"Oculto en el escenario"):"";
+  $("map").setAttribute("aria-label",`${$("map-context").textContent}. Jugador ${replay.player?(hidden?"oculto":"visible"):"sin posición registrada"}. ${replay.enemies.length} enemigos registrados en este momento.`);
+  renderEnemyList(replay);
+  renderHiddenIntervals(replay.hiddenIntervals);
+  const rawGrid=Math.max((b.maxX-b.minX)/12,1), magnitude=Math.pow(10,Math.floor(Math.log10(rawGrid)));
+  const grid=magnitude*([1,2,5,10].find(step=>step*magnitude>=rawGrid)||10);
+  ctx.lineWidth=1;ctx.strokeStyle="#25433470";
+  for(let x=Math.ceil(b.minX/grid)*grid;x<=b.maxX;x+=grid){const p=xy({x,z:centerZ});ctx.beginPath();ctx.moveTo(p.x,0);ctx.lineTo(p.x,h);ctx.stroke();}
+  for(let z=Math.ceil(b.minZ/grid)*grid;z<=b.maxZ;z+=grid){const p=xy({x:centerX,z});ctx.beginPath();ctx.moveTo(0,p.y);ctx.lineTo(w,p.y);ctx.stroke();}
+  const metadata=events.findLast(event=>event.kind==="level_started"&&event.data?.map_geometry);
+  if(metadata){
+    for(const obstacle of metadata.data.map_geometry.obstacles||[]){if(![obstacle.x,obstacle.z,obstacle.width,obstacle.depth].every(Number.isFinite))continue;const p=xy(obstacle);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-(Number(obstacle.yaw)||0));ctx.fillStyle="#2b443480";ctx.strokeStyle="#52634a70";ctx.fillRect(-obstacle.width*scale/2,-obstacle.depth*scale/2,obstacle.width*scale,obstacle.depth*scale);ctx.strokeRect(-obstacle.width*scale/2,-obstacle.depth*scale/2,obstacle.width*scale,obstacle.depth*scale);ctx.restore();}
+    for(const altar of metadata.data.map_geometry.altars||[]){const p=xy(altar);ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.strokeStyle="#8e845780";ctx.lineWidth=1;ctx.stroke();ctx.fillStyle="#a99b68";ctx.font="8px ui-sans-serif, sans-serif";ctx.fillText(altar.name||"Altar",p.x+10,p.y+3);}
+  }
+  // Draw only the history already reached by the cursor. Hidden portions remain distinct.
+  ctx.lineJoin="round";ctx.lineCap="round";ctx.lineWidth=2.2;
+  for(let i=1;i<replay.route.length;i++){
+    const previous=replay.route[i-1],next=replay.route[i],a=xy(previous.position),b=xy(next.position);
+    ctx.strokeStyle=previous.hidden?"#8bcde1":"#c5c98d";ctx.setLineDash(previous.hidden?[4,4]:[]);
+    ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  const actions=events.filter(event=>!sampleKinds.has(event.kind)&&event.position&&($("kind").value==="all"||event.kind===$("kind").value));
+  for(const event of actions){const p=xy(event.position);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(Math.PI/4);ctx.fillStyle=event.kind.includes("enemy")?"#a071655e":"#c6a96a99";ctx.fillRect(-2.5,-2.5,5,5);ctx.restore();}
+  function dot(point,color,radius,glow=false){if(!point)return;const p=xy(point.position);ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fillStyle=color;if(glow){ctx.shadowColor=color;ctx.shadowBlur=15;}ctx.fill();ctx.shadowBlur=0;ctx.lineWidth=2;ctx.strokeStyle="#11221a";ctx.stroke();}
+  dot(samples[0],"#81c6a9",4);
+  if($("enemies").checked)for(const enemy of replay.enemies){
+    const p=xy(enemy.position),color=enemyColors[enemy.state]||enemyColors.patrol;
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-enemy.yaw);
+    ctx.fillStyle=color;ctx.strokeStyle="#11191a";ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(6,6);ctx.lineTo(0,3);ctx.lineTo(-6,6);ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+    ctx.font="bold 10px ui-sans-serif, sans-serif";ctx.lineWidth=3;ctx.strokeStyle="#0e1813";ctx.strokeText(enemy.label,p.x+10,p.y+3);ctx.fillStyle=color;ctx.fillText(enemy.label,p.x+10,p.y+3);
+  }
+  dot(replay.player,hidden?"#8bcde1":"#ebefd2",5,true);
+  if(hidden){
+    const p=xy(replay.player.position);ctx.strokeStyle="#8bcde1";ctx.lineWidth=1.5;ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(p.x,p.y,11,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+    ctx.font="bold 9px ui-sans-serif, sans-serif";ctx.textAlign="center";ctx.strokeStyle="#0e1813";ctx.lineWidth=3;ctx.strokeText("OCULTO",p.x,p.y-18);ctx.fillStyle="#a5dceb";ctx.fillText("OCULTO",p.x,p.y-18);ctx.textAlign="left";
+  }
+  ctx.fillStyle="#647f6c";ctx.font="8px ui-monospace, monospace";ctx.fillText(`${Math.round(b.minX)}, ${Math.round(b.minZ)}`,12,18);
+}
+function renderEnemyList(replay){
+  const visible=$("enemies").checked;$("enemy-list").hidden=!visible;
+  const hasEnemyRecording=state.record?.events.some(event=>event.kind==="enemy_position_sample");
+  $("enemy-count").textContent=replay.enemySamples?`${replay.enemies.length} enemigos en este momento${visible?"":" · Ocultos en el plano"}`:hasEnemyRecording?"Aún no hay posiciones enemigas hasta este momento.":"Esta partida no contiene posiciones enemigas; las partidas antiguas no las registraban.";
+  const fragment=document.createDocumentFragment();
+  for(const enemy of replay.enemies){const item=node("span",`enemy-chip ${["patrol","investigate","chase"].includes(enemy.state)?enemy.state:"patrol"}`,`${enemy.label} · ${enemy.name} · ${enemyStates[enemy.state]||enemy.state}`);item.title=enemy.id;fragment.append(item);}
+  $("enemy-list").replaceChildren(fragment);
+}
+function renderHiddenIntervals(intervals){
+  const total=Math.max(state.record?.session.duration||0,.1),fragment=document.createDocumentFragment();
+  for(const interval of intervals){const item=node("span");item.style.left=`${interval.start/total*100}%`;item.style.width=`${Math.max(.15,(interval.end-interval.start)/total*100)}%`;item.title=`Oculto ${clock(interval.start)}–${clock(interval.end)}`;fragment.append(item);}
+  $("hide-periods").replaceChildren(fragment);
+  $("hide-periods").setAttribute("aria-label",intervals.length?intervals.map(interval=>`Oculto de ${clock(interval.start)} a ${clock(interval.end)}`).join(". "):"Sin ocultación en el tramo reproducido");
+}
+
+$("refresh").addEventListener("click",refresh);$("search").addEventListener("input",renderSessions);
+$("level").addEventListener("change",()=>{fillAttempts(true);state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
+$("attempt").addEventListener("change",()=>{state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
+for(const id of ["kind","samples"])$(id).addEventListener("change",()=>{state.shown=100;renderTimeline();drawMap();});
+$("enemies").addEventListener("change",drawMap);
+$("more").addEventListener("click",()=>{state.shown+=100;renderTimeline();});
+$("cursor").addEventListener("input",()=>{state.followEnd=false;state.playing=false;state.cursor=Number($("cursor").value);updateCursor();drawMap();});
+$("play").addEventListener("click",()=>{state.playing=!state.playing;state.followEnd=false;if(state.cursor>=(state.record?.session.duration||0))state.cursor=0;updateCursor();});
+$("live").addEventListener("click",()=>{state.followEnd=true;state.playing=false;state.cursor=state.record?.session.duration||0;updateCursor();drawMap();});
+function zoom(factor){state.zoom=Math.min(12,Math.max(.6,state.zoom*factor));drawMap();}
+$("zoom-in").addEventListener("click",()=>zoom(1.3));$("zoom-out").addEventListener("click",()=>zoom(1/1.3));
+$("fit").addEventListener("click",()=>{state.zoom=1;state.pan={x:0,y:0};drawMap();});
+$("map").addEventListener("wheel",event=>{event.preventDefault();zoom(event.deltaY<0?1.12:1/1.12);},{passive:false});
+$("map").addEventListener("pointerdown",event=>{state.dragging={x:event.clientX,y:event.clientY};$("map").setPointerCapture(event.pointerId);});
+$("map").addEventListener("pointermove",event=>{if(!state.dragging)return;state.pan.x+=event.clientX-state.dragging.x;state.pan.y+=event.clientY-state.dragging.y;state.dragging={x:event.clientX,y:event.clientY};drawMap();});
+$("map").addEventListener("pointerup",()=>{state.dragging=null;});$("map").addEventListener("pointercancel",()=>{state.dragging=null;});
+new ResizeObserver(drawMap).observe($("map"));
+setInterval(()=>{if(!state.playing||!state.record)return;state.cursor=Math.min(state.cursor+.25,state.record.session.duration);if(state.cursor>=state.record.session.duration)state.playing=false;updateCursor();drawMap();},100);
+setInterval(()=>{if(!document.hidden)refresh();},5000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
+refresh();

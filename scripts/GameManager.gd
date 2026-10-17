@@ -2,6 +2,8 @@ extends Node
 
 const DEATH_PENALTY: int = 50
 
+var skip_next_intro: bool = false
+
 var total_score: int = 0
 var high_score: int = 0
 var penalties_count: int = 0

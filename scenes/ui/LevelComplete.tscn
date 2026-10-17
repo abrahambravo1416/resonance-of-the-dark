@@ -1,0 +1,195 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/TransitionSkipInput.gd" id="1_3rktr"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dyb8b"]
+content_margin_left = 28.0
+content_margin_top = 24.0
+content_margin_right = 28.0
+content_margin_bottom = 24.0
+bg_color = Color(0.035, 0.025, 0.055, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.28, 0.2, 0.95)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="LabelSettings" id="LabelSettings_b85mq"]
+font_size = 30
+font_color = Color(0.92, 0.75, 0.52, 1)
+outline_size = 8
+outline_color = Color(0.02, 0.01, 0.025, 1)
+shadow_size = 10
+shadow_color = Color(0.75, 0.3, 0.12, 0.55)
+shadow_offset = Vector2(0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_p1qow"]
+bg_color = Color(0.32, 0.13, 0.09, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.82, 0.42, 0.22, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ppqp8"]
+bg_color = Color(0.48, 0.19, 0.11, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.68, 0.38, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_70dk1"]
+bg_color = Color(0.12, 0.1, 0.16, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.38, 0.32, 0.45, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_e8bve"]
+bg_color = Color(0.2, 0.16, 0.26, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.68, 0.38, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[node name="EscapeTransitionLayer" type="CanvasLayer" unique_id=1249882848]
+process_mode = 3
+layer = 30
+
+[node name="TransitionSkipInput" type="Node" parent="." unique_id=410111801]
+process_mode = 3
+script = ExtResource("1_3rktr")
+
+[node name="EscapeTransitionScreen" type="Control" parent="." unique_id=1567707113]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="EscapeBackdrop" type="ColorRect" parent="EscapeTransitionScreen" unique_id=1749476765]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.015, 0.01, 0.025, 0.9)
+
+[node name="SkipHint" type="Label" parent="EscapeTransitionScreen" unique_id=1792154784]
+layout_mode = 0
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -360.0
+offset_top = -48.0
+offset_right = -28.0
+offset_bottom = -16.0
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 14
+text = "Presiona ENTER para saltar"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="EscapePanel" type="PanelContainer" parent="EscapeTransitionScreen" unique_id=1716561185]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -235.0
+offset_right = 360.0
+offset_bottom = 235.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_dyb8b")
+
+[node name="Content" type="VBoxContainer" parent="EscapeTransitionScreen/EscapePanel" unique_id=629474116]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="EscapeTitle" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=681994470]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+text = "NIVEL COMPLETADO"
+label_settings = SubResource("LabelSettings_b85mq")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="EscapeDescription" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=747832142]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.76, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+text = "El cementerio aún guarda secretos."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Summary1" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=351860117]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.8, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+text = "Tiempo restante: 0 seg"
+horizontal_alignment = 1
+
+[node name="Summary2" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1101722033]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.8, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+text = "Puntos ganados: +0"
+horizontal_alignment = 1
+
+[node name="Summary3" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=2083620274]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.72, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+text = "Puntuación Total: 0"
+horizontal_alignment = 1
+
+[node name="HighScoreNotice" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1679586232]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.72, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+text = "¡NUEVA MEJOR PUNTUACIÓN!"
+horizontal_alignment = 1
+
+[node name="ContinueButton" type="Button" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=2056344396]
+custom_minimum_size = Vector2(360, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.92, 0.82, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_p1qow")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_ppqp8")
+theme_override_styles/hover = SubResource("StyleBoxFlat_ppqp8")
+text = "CONTINUAR AL NIVEL 5"
+
+[node name="MenuButton" type="Button" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1985618170]
+custom_minimum_size = Vector2(360, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.92, 0.82, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_70dk1")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_e8bve")
+theme_override_styles/hover = SubResource("StyleBoxFlat_e8bve")
+text = "MENÚ PRINCIPAL"

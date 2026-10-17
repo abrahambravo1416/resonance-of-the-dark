@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101918">
+  <title>Resonance · Archivo de partidas</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/replay.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="Resonance, archivo de partidas"><span class="sigil" aria-hidden="true">R</span><span>RESONANCE<span class="brand-sub">OF THE DARK / ARCHIVO DE PARTIDAS</span></span></a>
+    <div class="header-right"><span id="connection" class="connection"><i></i> Conectando…</span><button id="refresh" class="button quiet" title="Actualizar los registros">↻ <span>Actualizar</span></button></div>
+  </header>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div class="workspace">
+    <aside class="sidebar" aria-label="Partidas registradas">
+      <div class="sidebar-heading"><span class="eyebrow">EL ARCHIVO</span><span id="session-count" class="count">0</span></div>
+      <h1>Huellas en la oscuridad.</h1>
+      <p class="muted intro">Cada recorrido tiene una historia. Encuentra lo que ocurrió en el cementerio.</p>
+      <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Buscar jugador o partida" aria-label="Buscar jugador o partida"></label>
+      <div id="sessions" class="session-list" aria-live="polite"></div>
+      <div class="local-note"><span class="tiny-dot"></span> Archivo local · SQLite<span>Los registros se actualizan cada 5 segundos.</span></div>
+    </aside>
+    <main id="main">
+      <section id="welcome" class="welcome">
+        <div class="empty-mark" aria-hidden="true">◎</div><span class="eyebrow">TODAVÍA NO HAY HUELLAS</span>
+        <h2>El cementerio espera.</h2><p>Abre el juego y empieza una partida.<br>Su recorrido y sus acciones aparecerán aquí automáticamente.</p>
+        <div class="empty-steps"><span><b>01</b> Abre el juego</span><span><b>02</b> Explora el nivel</span><span><b>03</b> Consulta su historia</span></div>
+        <p class="empty-note">Si jugaste con el panel cerrado, tus registros se importan al abrirlo.</p>
+      </section>
+      <div id="detail" hidden>
+        <div class="detail-heading"><div><div class="eyebrow" id="session-date">PARTIDA</div><h2 id="session-title">Explorador</h2><p id="session-meta" class="muted"></p></div><div class="heading-actions"><span id="session-status" class="badge"></span><a id="export" class="button" href="#">↓ Exportar CSV</a></div></div>
+        <section class="metrics" aria-label="Resumen de la partida">
+          <div class="metric"><span>Tiempo registrado</span><strong id="duration">—</strong><small>desde el inicio de la sesión</small></div>
+          <div class="metric"><span>Distancia recorrida</span><strong id="distance">—</strong><small>aproximación sobre el plano X/Z</small></div>
+          <div class="metric"><span>Acciones registradas</span><strong id="actions">—</strong><small>sin contar muestras de posición</small></div>
+          <div class="metric"><span>Niveles visitados</span><strong id="levels">—</strong><small>en esta sesión de juego</small></div>
+        </section>
+        <div class="filters"><div class="filter"><label for="level">Nivel</label><select id="level"><option value="all">Todos los niveles</option></select></div><div class="filter"><label for="attempt">Recorrido</label><select id="attempt"><option value="all">Todos los intentos</option></select></div><div class="filter"><label for="kind">Actividad</label><select id="kind"><option value="all">Todas las acciones</option></select></div><label class="checkbox"><input id="samples" type="checkbox"> Ver muestras de posición</label></div>
+        <section class="map-panel panel" aria-labelledby="map-heading">
+          <div class="panel-heading"><div><span class="eyebrow">CARTOGRAFÍA DEL RECORRIDO</span><h3 id="map-heading">Por dónde caminó</h3></div><div class="map-tools"><button id="zoom-out" class="icon-button" aria-label="Alejar plano">−</button><button id="zoom-in" class="icon-button" aria-label="Acercar plano">+</button><button id="fit" class="button quiet">Ajustar vista</button></div></div>
+          <div class="replay-status"><span id="map-context">Sin nivel en este momento</span><span id="player-state" class="player-state">Sin posición</span><label class="checkbox"><input id="enemies" type="checkbox" checked> Mostrar enemigos</label></div>
+          <div class="map-stage"><canvas id="map" aria-label="Plano del jugador, su ocultación y los enemigos sobre los ejes X y Z"></canvas><div id="map-empty" class="map-empty" hidden>El recorrido aparecerá al entrar al nivel.</div><span class="map-axis">N / −Z ↑<br>+X →</span><span class="map-caption">Vista de trayectoria · arrastra para mover</span></div>
+          <div class="map-footer"><div class="legend"><span><i class="start"></i> Inicio</span><span><i class="trail"></i> Recorrido</span><span><i class="hidden-trail"></i> Oculto</span><span><i class="event"></i> Acción</span><span><i class="current"></i> Jugador</span></div><span id="map-points" class="muted"></span></div>
+          <div id="enemy-info" class="enemy-info"><div class="legend"><span><i class="enemy-patrol"></i> Patrulla</span><span><i class="enemy-investigate"></i> Investiga</span><span><i class="enemy-chase"></i> Persigue</span></div><span id="enemy-count"></span><div id="enemy-list" class="enemy-list"></div></div>
+          <div class="playback"><button id="play" class="icon-button" aria-label="Reproducir recorrido">▶</button><output id="cursor-time" for="cursor">00:00</output><input id="cursor" type="range" min="0" max="1" step="0.1" value="1" aria-label="Momento del recorrido"><span id="total-time">00:00</span><button id="live" class="button quiet">Ir al final</button></div>
+          <div class="hide-periods"><span>Ocultación</span><div id="hide-periods" class="hide-track" role="img" aria-label="Intervalos de ocultación reproducidos"></div></div>
+        </section>
+        <section class="timeline panel" aria-labelledby="timeline-heading"><div class="panel-heading"><div><span class="eyebrow">LA HISTORIA DE LA PARTIDA</span><h3 id="timeline-heading">Registro de actividad</h3></div><span id="event-count" class="muted"></span></div><div id="timeline" class="event-list"></div><button id="more" class="button show-more" hidden>Mostrar más acciones</button></section>
+        <footer class="footer">RESONANCE OF THE DARK<span>Datos de esta máquina · No requiere conexión a internet</span></footer>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

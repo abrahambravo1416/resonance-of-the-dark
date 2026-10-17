@@ -1,0 +1,28 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/LevelManager.gd" id="1_riesm"]
+
+[node name="LevelManager" type="Node" unique_id=33882831]
+script = ExtResource("1_riesm")
+
+[node name="TimeScoreHUD" type="CanvasLayer" parent="." unique_id=1056296120]
+layer = 8
+
+[node name="TimeScore" type="VBoxContainer" parent="TimeScoreHUD" unique_id=424872925]
+offset_left = 28.0
+offset_top = 102.0
+offset_right = 28.0
+offset_bottom = 102.0
+theme_override_constants/separation = 4
+
+[node name="Timer" type="Label" parent="TimeScoreHUD/TimeScore" unique_id=46910558]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9490196, 0.8352941, 0.627451, 1)
+theme_override_font_sizes/font_size = 18
+text = "TIEMPO  05:00"
+
+[node name="Score" type="Label" parent="TimeScoreHUD/TimeScore" unique_id=558427387]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8862745, 0.78039217, 0.64705884, 1)
+theme_override_font_sizes/font_size = 16
+text = "PUNTUACIÓN  0"

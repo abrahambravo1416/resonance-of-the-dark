@@ -1,0 +1,170 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/GameOverMenu.gd" id="1_3xley"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_edlwy"]
+bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_r3fqu"]
+bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0dtn"]
+bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0t8r"]
+bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_k8sul"]
+bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_autax"]
+bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="GameOverMenu" type="CanvasLayer" unique_id=295864501]
+process_mode = 3
+layer = 11
+script = ExtResource("1_3xley")
+
+[node name="GameOverOverlay" type="Control" parent="." unique_id=1789412738]
+process_mode = 3
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="BloodDimmer" type="ColorRect" parent="GameOverOverlay" unique_id=1493185551]
+process_mode = 3
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.09, 0.015, 0.025, 0.9)
+
+[node name="GameOverLayout" type="VBoxContainer" parent="GameOverOverlay" unique_id=376892113]
+process_mode = 3
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -210.0
+offset_right = 220.0
+offset_bottom = 210.0
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Title" type="Label" parent="GameOverOverlay/GameOverLayout" unique_id=592674337]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9372549, 0.41568628, 0.38431373, 1)
+theme_override_font_sizes/font_size = 48
+text = "GAME OVER"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="GameOverOverlay/GameOverLayout" unique_id=990037993]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9019608, 0.78039217, 0.7647059, 1)
+theme_override_font_sizes/font_size = 18
+text = "No fuiste tan hábil"
+horizontal_alignment = 1
+
+[node name="ScorePenalty" type="Label" parent="GameOverOverlay/GameOverLayout" unique_id=668853213]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9019608, 0.78039217, 0.7647059, 1)
+theme_override_font_sizes/font_size = 16
+text = "- 50 en puntuación final"
+horizontal_alignment = 1
+
+[node name="@Control@33" type="Control" parent="GameOverOverlay/GameOverLayout" unique_id=511204855]
+custom_minimum_size = Vector2(0, 12)
+layout_mode = 2
+
+[node name="RestartButton" type="Button" parent="GameOverOverlay/GameOverLayout" unique_id=1102245443]
+process_mode = 3
+custom_minimum_size = Vector2(320, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_edlwy")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_r3fqu")
+theme_override_styles/hover = SubResource("StyleBoxFlat_r3fqu")
+text = "REINICIAR NIVEL"
+
+[node name="MenuButton" type="Button" parent="GameOverOverlay/GameOverLayout" unique_id=1998250112]
+process_mode = 3
+custom_minimum_size = Vector2(320, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_g0dtn")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_g0t8r")
+theme_override_styles/hover = SubResource("StyleBoxFlat_g0t8r")
+text = "MENÚ PRINCIPAL"
+
+[node name="ExitButton" type="Button" parent="GameOverOverlay/GameOverLayout" unique_id=107209684]
+process_mode = 3
+custom_minimum_size = Vector2(320, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_k8sul")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_autax")
+theme_override_styles/hover = SubResource("StyleBoxFlat_autax")
+text = "SALIR"
