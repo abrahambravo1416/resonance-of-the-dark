@@ -1,3 +1,10 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Datos locales de partidas. El esquema y el servidor sí se versionan.
+/telemetry/data/*
+!/telemetry/data/.gitkeep
+__pycache__/
+*.pyc
+.DS_Store

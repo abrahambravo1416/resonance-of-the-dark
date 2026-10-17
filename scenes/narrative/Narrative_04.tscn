@@ -1,0 +1,53 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/narrative/NarrativeLayer.tscn" id="base"]
+[ext_resource type="PackedScene" path="res://scenes/narrative/Keeper.tscn" id="keeper"]
+[ext_resource type="PackedScene" path="res://scenes/narrative/Memory.tscn" id="memory"]
+[ext_resource type="PackedScene" path="res://scenes/narrative/AmbientEncounter.tscn" id="event"]
+[ext_resource type="PackedScene" path="res://assets/skeletons_extra/gltf/Skeleton_Minion.glb" id="witness"]
+
+[node name="Narrative" instance=ExtResource("base")]
+greeting = "Una voz te espera junto a la entrada. Acércate y pulsa G para escuchar su historia."
+
+[node name="Custodian" parent="." instance=ExtResource("keeper")]
+position = Vector3(48.8, 0, 52.0)
+rotation = Vector3(0, 3.1415927, 0)
+encounter_id = "level_4_custodian"
+lines = Array[String](["He custodiado estos restos durante años. Cumple el ritual y permite que el cementerio descanse.", "Una muchacha llamada Lucía dejó recuerdos en este lugar. Si los encuentras, escucha lo que todavía tienen que decir.", "No dejes que mi relato te distraiga de tu objetivo. El tiempo sigue corriendo."])
+
+[node name="Witness" parent="." instance=ExtResource("keeper")]
+position = Vector3(51, 0, 15)
+encounter_id = "level_4_witness"
+display_name = "El testigo"
+lines = Array[String](["Recuerdo este lugar antes del silencio. Lo que queda de nosotros: así llamábamos a esta parte del cementerio.", "Aquí sigo, velando los nombres. Cada vez que alguien los pronuncia, el frío cede un instante."])
+
+[node name="FirstMemory" parent="." instance=ExtResource("memory")]
+position = Vector3(47.0, 0.12, 50.0)
+encounter_id = "level_4_memory_a"
+display_name = "La despedida"
+lines = Array[String](["«No busques mi voz entre los árboles. Si encuentras la salida, lleva contigo nuestra historia.» — Lucía"])
+
+[node name="SecondMemory" parent="." instance=ExtResource("memory")]
+position = Vector3(51, 0.12, 93)
+encounter_id = "level_4_memory_b"
+display_name = "El recuerdo del custodio"
+lines = Array[String](["«La última luz no vive en la lámpara. Vive en quien regresa para contar qué ocurrió.» Una inscripción casi borrada."])
+
+[node name="PassingEcho" parent="." instance=ExtResource("event")]
+position = Vector3(51, 1, 57.0)
+event_id = "level_4_footsteps"
+title = "Pasos sin dueño"
+message = "Oyes pasos que se detienen cuando tú lo haces. El sendero sigue vacío."
+
+[node name="WhisperEcho" parent="." instance=ExtResource("event")]
+position = Vector3(93, 1, 51)
+event_id = "level_4_whisper"
+title = "Una voz entre las lápidas"
+message = "La voz pronuncia un nombre: Lucía. Después, las velas tiemblan y vuelve el silencio."
+
+[editable path="Custodian"]
+[editable path="Witness"]
+[editable path="FirstMemory"]
+[editable path="SecondMemory"]
+[editable path="PassingEcho"]
+[editable path="WhisperEcho"]

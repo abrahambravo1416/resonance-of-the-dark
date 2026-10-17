@@ -66,8 +66,9 @@ var _pumpkin_head: Node3D
 
 func _ready() -> void:
 	add_to_group("enemy")
-	collision_layer = 1
-	collision_mask = 1
+	if not has_meta("authored_appearance"):
+		collision_layer = 1
+		collision_mask = 1
 	floor_snap_length = 0.6
 	var spawn_position: Vector3 = global_position
 	spawn_position.y = ground_height
@@ -75,8 +76,9 @@ func _ready() -> void:
 	velocity.y = 0.0
 	_snap_to_floor_origin()
 	var body_collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
-	if body_collision != null:
+	if body_collision != null and not has_meta("authored_appearance"):
 		body_collision.position.y = 1.0
+	_pumpkin_head = find_child("PumpkinHead", true, false) as Node3D
 	if navigation_agent == null:
 		navigation_agent = get_node_or_null("NavigationAgent3D") as NavigationAgent3D
 	if navigation_agent != null:

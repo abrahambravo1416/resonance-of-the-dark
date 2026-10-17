@@ -1,0 +1,139 @@
+[gd_scene format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_q3587"]
+content_margin_left = 28.0
+content_margin_top = 24.0
+content_margin_right = 28.0
+content_margin_bottom = 24.0
+bg_color = Color(0.035, 0.025, 0.055, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.28, 0.2, 0.95)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="LabelSettings" id="LabelSettings_dfxnh"]
+font_size = 32
+font_color = Color(0.55, 1, 0.65, 1)
+outline_size = 8
+outline_color = Color(0.02, 0.01, 0.025, 1)
+shadow_size = 10
+shadow_color = Color(0.1, 0.8, 0.25, 0.65)
+shadow_offset = Vector2(0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_f5ei0"]
+bg_color = Color(0.32, 0.13, 0.09, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.82, 0.42, 0.22, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_jbjlj"]
+bg_color = Color(0.48, 0.19, 0.11, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.68, 0.38, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[node name="EscapeTransitionLayer" type="CanvasLayer" unique_id=1726239068]
+process_mode = 3
+layer = 30
+
+[node name="EscapeTransitionScreen" type="Control" parent="." unique_id=1930671017]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="EscapeBackdrop" type="ColorRect" parent="EscapeTransitionScreen" unique_id=1781734364]
+layout_mode = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.015, 0.01, 0.025, 0.9)
+
+[node name="EscapePanel" type="PanelContainer" parent="EscapeTransitionScreen" unique_id=153856307]
+layout_mode = 0
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -360.0
+offset_top = -235.0
+offset_right = 360.0
+offset_bottom = 235.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_q3587")
+
+[node name="Content" type="VBoxContainer" parent="EscapeTransitionScreen/EscapePanel" unique_id=1332902738]
+layout_mode = 2
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="EscapeTitle" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1822525418]
+custom_minimum_size = Vector2(0, 70)
+layout_mode = 2
+text = "¡HAS ESCAPADO!"
+label_settings = SubResource("LabelSettings_dfxnh")
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="EscapeDescription" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=896051184]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.78, 0.76, 0.82, 1)
+theme_override_font_sizes/font_size = 18
+text = "El cementerio aún guarda secretos."
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Summary1" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=2097499302]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.8, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+text = "0 muertes totales: -0 puntos"
+horizontal_alignment = 1
+
+[node name="Summary2" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1795235212]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.82, 0.8, 0.86, 1)
+theme_override_font_sizes/font_size = 16
+text = "Puntos ganados: +0"
+horizontal_alignment = 1
+
+[node name="Summary3" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1449476508]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.72, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+text = "PUNTUACIÓN TOTAL: 0 pts"
+horizontal_alignment = 1
+
+[node name="HighScoreNotice" type="Label" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=1666097487]
+visible = false
+layout_mode = 2
+theme_override_colors/font_color = Color(0.96, 0.72, 0.42, 1)
+theme_override_font_sizes/font_size = 18
+text = "¡NUEVA MEJOR PUNTUACIÓN!"
+horizontal_alignment = 1
+
+[node name="MenuButton" type="Button" parent="EscapeTransitionScreen/EscapePanel/Content" unique_id=838217594]
+custom_minimum_size = Vector2(360, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.92, 0.82, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_f5ei0")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_jbjlj")
+theme_override_styles/hover = SubResource("StyleBoxFlat_jbjlj")
+text = "VOLVER AL MENÚ PRINCIPAL"

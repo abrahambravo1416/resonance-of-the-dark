@@ -1,8 +1,8 @@
 extends Node3D
 class_name LevelBuilder
 
-## Runtime level generator. Attach this script to a level root named Level_01,
-## or call build_map() from another script after placing it in the scene.
+## Editable cemetery controller. Saved Level scenes contain the original generated
+## geometry. Runtime binds those nodes; build_map remains an explicit legacy tool.
 
 @export_group("Generation")
 @export var auto_build_on_ready: bool = true
@@ -139,8 +139,112 @@ var _health_skull_respawns_remaining: int = 0
 
 
 func _ready() -> void:
-	if auto_build_on_ready:
+	if has_meta("authored_layout"):
+		_bind_authored_level()
+	elif auto_build_on_ready:
 		build_map()
+
+
+func _bind_authored_level() -> void:
+	# Bind saved nodes without recreating or repositioning anything in the map.
+	navigation_region = get_node("NavigationRegion3D") as NavigationRegion3D
+	environment_root = navigation_region.get_node("Environment") as Node3D
+	hiding_zones_root = navigation_region.get_node("HidingZones") as Node3D
+	items_root = navigation_region.get_node("Items") as Node3D
+	ritual_altars_root = get_node("RitualAltars") as Node3D
+	exit_gate_root = get_node("ExitGate") as Node3D
+	patrol_points_root = get_node("PatrolPoints") as Node3D
+	player = get_node("Player") as CharacterBody3D
+	_rng.seed = random_seed
+	enemies.clear()
+	for child in get_children():
+		if child is EnemyAI:
+			enemies.append(child)
+			child.set_player_reference(player)
+	enemy = enemies[0] if not enemies.is_empty() else null
+	_enemy_count = enemies.size()
+	if player.has_method("set_enemies"):
+		player.call("set_enemies", enemies)
+	_patrol_markers.clear()
+	for marker in patrol_points_root.get_children():
+		if marker is Node3D:
+			_patrol_markers.append(marker)
+	for enemy_node in enemies:
+		var enemy_ai := enemy_node as EnemyAI
+		var route: Array[Node3D] = []
+		# Authored exported routes are primary, so each point can move independently.
+		for marker in enemy_ai.patrol_points:
+			if is_instance_valid(marker):
+				route.append(marker)
+		enemy_ai.configure_patrol_route(route)
+	ritual_shrines.clear()
+	for altar in ritual_altars_root.get_children():
+		if altar is RitualAltar:
+			ritual_shrines.append(altar)
+	_ritual_altar_count = ritual_shrines.size()
+	active_skulls.clear()
+	active_pumpkins.clear()
+	var mission_items := 0
+	for item in items_root.get_children():
+		if item is InteractableItem:
+			mission_items += 1
+		elif item.get_meta("pickup_kind", "") == "health":
+			active_skulls.append(item)
+		elif item.get_meta("pickup_kind", "") == "pumpkin":
+			active_pumpkins.append(item)
+	_pumpkin_count = active_pumpkins.size()
+	absolute_ritual_relics_root = items_root.get_node_or_null("AbsoluteRitualConstruction") as Node3D
+	absolute_ritual_relics.clear()
+	if absolute_ritual_relics_root != null:
+		for relic in absolute_ritual_relics_root.get_children():
+			if relic is Node3D and relic.is_in_group("absolute_ritual_relics"):
+				absolute_ritual_relics.append(relic)
+		absolute_ritual_delivery_area = absolute_ritual_relics_root.get_node_or_null("AbsoluteRitualDeliveryArea") as Area3D
+		if absolute_ritual_delivery_area != null:
+			absolute_ritual_delivery_position = absolute_ritual_delivery_area.global_position - Vector3.UP
+	_absolute_ritual_relic_count = absolute_ritual_relics.size()
+	absolute_ritual_relics_delivered = 0
+	player.call("configure_level", level_number, _ritual_altar_count, _absolute_ritual_relic_count)
+	if level_number < 3:
+		player.set("total_items_needed", mission_items)
+	player.call("set_ritual_shrines", ritual_shrines)
+	_health_skull_respawn_timer = get_node_or_null("HealthSkullRespawnTimer") as Timer
+	if _health_skull_respawn_timer != null:
+		_health_skull_respawn_timer.timeout.connect(_on_health_skull_respawn_timeout)
+	exit_gate_assembly = exit_gate_root.get_node("GateAssembly") as Node3D
+	exit_gate_swing_pivot = exit_gate_assembly.get_node("GateSwingPivot") as Node3D
+	exit_gate_visual = exit_gate_swing_pivot.get_node_or_null("ArchGateVisual") as Node3D
+	exit_gate_barrier = exit_gate_assembly.get_node("ClosedGateBarrier") as StaticBody3D
+	exit_gate_collision = exit_gate_barrier.get_node("ClosedGateCollision") as CollisionShape3D
+	exit_gate_proximity_area = exit_gate_root.get_node("GateProximityArea") as Area3D
+	exit_gate_area = exit_gate_root.get_node("GateEscapeArea") as Area3D
+	exit_gate_light = exit_gate_root.get_node("ExitGateStatusLight") as OmniLight3D
+	exit_gate_proximity_area.body_entered.connect(_on_exit_gate_proximity_entered)
+	exit_gate_proximity_area.body_exited.connect(_on_exit_gate_proximity_exited)
+	exit_gate_area.body_entered.connect(_on_exit_gate_crossed)
+	player.connect("cemetery_exit_unlocked", _open_exit_gate)
+	player.call("set_exit_gate_radar_target", exit_gate_assembly, false)
+	level_music_player = get_node_or_null("LevelMusicPlayer") as AudioStreamPlayer
+	pursuit_music_player = get_node_or_null("PursuitMusicPlayer") as AudioStreamPlayer
+	if level_music_player != null:
+		level_music_player.play()
+	if pursuit_music_player != null:
+		pursuit_music_player.stop()
+	if bake_navigation_after_build:
+		bake_navigation()
+	else:
+		_activate_enemy_navigation()
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.observe_level(self)
+	if player.has_method("show_level_intro"):
+		player.call("show_level_intro", level_number)
+
+
+func _record_event(kind: String, data: Dictionary = {}, world_position: Variant = null) -> void:
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.record(kind, data, world_position, level_number)
 
 
 func build_map() -> void:
@@ -1052,6 +1156,7 @@ func _open_exit_gate() -> void:
 	if _exit_gate_is_open:
 		return
 	_exit_gate_is_open = true
+	_record_event("exit_unlocked", {}, exit_gate_assembly.global_position if exit_gate_assembly != null else null)
 	if player != null and is_instance_valid(player) and player.has_method("set_exit_gate_radar_open"):
 		player.call("set_exit_gate_radar_open", true)
 	if exit_gate_collision != null and is_instance_valid(exit_gate_collision):
@@ -1066,7 +1171,7 @@ func _open_exit_gate() -> void:
 	if exit_gate_swing_pivot != null and is_instance_valid(exit_gate_swing_pivot):
 		var opening_tween := create_tween()
 		opening_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-		opening_tween.tween_property(exit_gate_swing_pivot, "rotation:y", PI * 0.5, 0.8).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		opening_tween.tween_property(exit_gate_swing_pivot, "rotation:y", exit_gate_swing_pivot.rotation.y + PI * 0.5, 0.8).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 func _find_fence_scene() -> PackedScene:
@@ -1200,6 +1305,8 @@ func spawn_health_skulls() -> void:
 
 
 func _spawn_health_skull() -> bool:
+	if has_meta("authored_layout"):
+		return _spawn_authored_health_skull()
 	var candidates: Array[Vector2i] = []
 	for free_cell in _free_cells:
 		if not _is_level4_reserved_cell(free_cell) and _has_collectible_clearance(free_cell):
@@ -1229,6 +1336,40 @@ func _spawn_health_skull() -> bool:
 	return true
 
 
+func _spawn_authored_health_skull() -> bool:
+	var markers := get_node_or_null("HealthRespawnPoints")
+	if markers == null:
+		return false
+	var candidates: Array[Node3D] = []
+	for marker in markers.get_children():
+		if not marker is Node3D:
+			continue
+		var occupied := false
+		for skull in active_skulls:
+			if is_instance_valid(skull) and skull.global_position.distance_squared_to(marker.global_position) < 0.1:
+				occupied = true
+		if not occupied:
+			candidates.append(marker)
+	if candidates.is_empty():
+		return false
+	var template := health_skull_scene
+	if template == null:
+		template = load("res://scenes/HealthSkull.tscn") as PackedScene
+	if template == null:
+		return false
+	var skull := template.instantiate() as Area3D
+	if skull == null:
+		return false
+	var marker: Node3D = candidates[_rng.randi_range(0, candidates.size() - 1)]
+	skull.name = "HealthSkull_Respawn"
+	skull.set_meta("pickup_kind", "health")
+	items_root.add_child(skull)
+	skull.global_position = marker.global_position
+	active_skulls.append(skull)
+	_record_event("pickup_respawned", {"item": "health_skull", "node": str(skull.name)}, skull.global_position)
+	return true
+
+
 func get_nearby_health_skull(collector: Node3D, max_distance: float = 2.0) -> Node3D:
 	return _get_nearby_pickup(active_skulls, collector, max_distance)
 
@@ -1247,6 +1388,7 @@ func try_collect_nearby_health_skull(collector: Node3D) -> bool:
 		collector.call("play_sound_effect", HEALTH_SKULL_PICKUP_SFX)
 	if collector.has_method("heal"):
 		collector.call("heal", 1)
+	_record_event("item_collected", {"item": "health_skull", "node": str(skull.name)}, skull.global_position)
 	active_skulls.erase(skull)
 	var cell_variant: Variant = skull.get_meta("cell", null)
 	if cell_variant is Vector2i and not _free_cells.has(cell_variant):
@@ -1509,6 +1651,7 @@ func _deposit_absolute_ritual_relic(actor: Node3D, relic: Node3D) -> bool:
 	relic.global_rotation = Vector3(0.0, _rng.randf_range(0.0, TAU), 0.0)
 	relic.set_meta("carried", false)
 	relic.set_meta("delivered", true)
+	_record_event("relic_delivered", {"node": str(relic.name)}, actor.global_position)
 	absolute_ritual_relics_delivered = mini(absolute_ritual_relics_delivered + 1, _absolute_ritual_relic_count)
 	if actor.has_method("set_absolute_ritual_relic_progress"):
 		actor.call("set_absolute_ritual_relic_progress", absolute_ritual_relics_delivered, _absolute_ritual_relic_count)

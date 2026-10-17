@@ -28,6 +28,19 @@ const SFX_LOSE: AudioStreamWAV = preload("res://audio/Efectos cortos/lose.wav")
 const SFX_WALK: AudioStreamWAV = preload("res://audio/Efectos cortos/caminar.wav")
 const TRANSITION_SKIP_INPUT_SCRIPT: Script = preload("res://scripts/TransitionSkipInput.gd")
 
+@export_group("Editable scenes")
+@export var intro_scenes: Array[PackedScene] = [preload("res://scenes/ui/LevelIntro_01.tscn"), preload("res://scenes/ui/LevelIntro_02.tscn"), preload("res://scenes/ui/LevelIntro_03.tscn"), preload("res://scenes/ui/LevelIntro_04.tscn")]
+@export var level_complete_scene: PackedScene = preload("res://scenes/ui/LevelComplete.tscn")
+@export var victory_scene: PackedScene = preload("res://scenes/ui/Victory.tscn")
+@export var enemy_marker_scene: PackedScene = preload("res://scenes/ui/RadarEnemyMarker.tscn")
+@export var skull_marker_scene: PackedScene = preload("res://scenes/ui/RadarSkullMarker.tscn")
+@export var pumpkin_marker_scene: PackedScene = preload("res://scenes/ui/RadarPumpkinMarker.tscn")
+@export var relic_marker_scene: PackedScene = preload("res://scenes/ui/RadarRelicMarker.tscn")
+@export var sound_effect_scene: PackedScene = preload("res://scenes/ui/SoundEffect.tscn")
+@export var hiding_animation: AnimationPlayer
+@export var hiding_motion: Node3D
+@export var camera_shake: Node3D
+
 @export_group("References")
 @export var camera: Camera3D
 @export var interaction_ray: RayCast3D
@@ -103,6 +116,9 @@ var _noise_timer: float = 0.0
 var _pitch: float = 0.0
 var _standing_camera_height: float = 0.55
 var _camera_base_position: Vector3 = Vector3.ZERO
+var _camera_base_rotation: Vector3 = Vector3.ZERO
+var _hiding_camera_weight: float = 0.0
+var _exiting_cover: Dictionary = {}
 var _regeneration_timer: float = 0.0
 var _hidden_by_zone: bool = false
 var _hiding_target: Node3D
@@ -183,16 +199,20 @@ func _ready() -> void:
 	max_health = maxi(1, max_health)
 	current_health = clampi(current_health, 0, max_health)
 	_ensure_input_actions()
+	_bind_authored_nodes(self)
+	_radar_alert_settings = _radar_alert_label.label_settings
+	_radar_distance_settings = _radar_distance_label.label_settings
+	_pumpkin_lock_timer.timeout.connect(_hide_pumpkin_lock_message)
 	_configure_collision_shape()
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
 	if camera != null:
 		_standing_camera_height = camera.position.y
 		_camera_base_position = camera.position
-	_create_threat_radar()
-	_create_ritual_ui()
-	_create_damage_feedback_ui()
-	_create_footstep_player()
+		_camera_base_rotation = camera.rotation
+		_pitch = camera.rotation.x
+	if hiding_animation != null:
+		hiding_animation.animation_finished.connect(_on_hiding_animation_finished)
 	_refresh_radar_enemies()
 	if interaction_ray == null and camera != null:
 		interaction_ray = camera.get_node_or_null("InteractionRay") as RayCast3D
@@ -200,16 +220,15 @@ func _ready() -> void:
 		interaction_ray.add_exception(self)
 		interaction_ray.collide_with_areas = true
 	_configure_hiding_ray()
-	_create_interaction_prompt()
-	_create_breath_hud()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if get_node_or_null("/root/LevelManager") != null:
-		LevelManager.register_player(self)
+		get_node("/root/LevelManager").call("register_player", self)
 	if current_health <= 0:
 		_die()
 
 
 func _process(delta: float) -> void:
+	_apply_camera_pose()
 	_update_threat_radar(delta)
 	_update_interaction_prompt()
 	if is_hiding:
@@ -224,233 +243,9 @@ func _process(delta: float) -> void:
 	_regeneration_timer -= delta
 	if _regeneration_timer <= 0.0:
 		current_health = mini(current_health + 1, max_health)
+		_log("health_restored", {"amount": 1, "health": current_health, "source": "passive_regeneration"})
 		health_changed.emit(current_health, max_health)
 		_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
-
-
-func _create_threat_radar() -> void:
-	# The radar is a compact diegetic reticle rather than a rectangular HUD panel.
-	_radar_layer = CanvasLayer.new()
-	_radar_layer.name = "ThreatRadarLayer"
-	_radar_layer.layer = 6
-	add_child(_radar_layer)
-
-	_radar_root = Control.new()
-	_radar_root.name = "ThreatRadarHUD"
-	_radar_root.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_radar_root.offset_left = 24.0
-	_radar_root.offset_top = -194.0
-	_radar_root.offset_right = 244.0
-	_radar_root.offset_bottom = -20.0
-	_radar_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_layer.add_child(_radar_root)
-
-	_radar_alert_label = Label.new()
-	_radar_alert_label.name = "ThreatAlertState"
-	_radar_alert_label.text = "ESTADO: PATRULLANDO"
-	_radar_alert_label.position = Vector2(0.0, 149.0)
-	_radar_alert_label.size = Vector2(220.0, 24.0)
-	_radar_alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_radar_alert_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_radar_alert_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_alert_settings = LabelSettings.new()
-	var radar_font := SystemFont.new()
-	radar_font.font_names = PackedStringArray(["Arial", "DejaVu Sans", "sans-serif"])
-	radar_font.font_weight = 700
-	_radar_alert_settings.font = radar_font
-	_radar_alert_settings.font_size = 14
-	_radar_alert_settings.font_color = Color(0.2, 0.9, 0.4)
-	_radar_alert_settings.outline_color = Color.BLACK
-	_radar_alert_settings.outline_size = 8
-	_radar_alert_settings.shadow_color = Color(0.2, 0.9, 0.4, 0.6)
-	_radar_alert_settings.shadow_size = 5
-	_radar_alert_settings.shadow_offset = Vector2(1.0, 1.0)
-	_radar_alert_label.label_settings = _radar_alert_settings
-	_radar_root.add_child(_radar_alert_label)
-
-	_radar_arrow_area = Control.new()
-	_radar_arrow_area.name = "RadarReticle"
-	_radar_arrow_area.position = Vector2(52.0, 25.0)
-	_radar_arrow_area.size = Vector2(116.0, 116.0)
-	_radar_arrow_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_root.add_child(_radar_arrow_area)
-
-	_radar_circle = Panel.new()
-	_radar_circle.name = "RadarCircle"
-	_radar_circle.size = Vector2(116.0, 116.0)
-	_radar_circle.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var circle_style := StyleBoxFlat.new()
-	circle_style.bg_color = Color(0.05, 0.05, 0.08, 0.6)
-	circle_style.border_color = Color(0.3, 0.8, 1.0, 0.4)
-	circle_style.set_border_width_all(1)
-	circle_style.set_corner_radius_all(58)
-	_radar_circle.add_theme_stylebox_override("panel", circle_style)
-	_radar_arrow_area.add_child(_radar_circle)
-
-	var inner_ring := Panel.new()
-	inner_ring.name = "RadarInnerRing"
-	inner_ring.position = Vector2(22.0, 22.0)
-	inner_ring.size = Vector2(72.0, 72.0)
-	inner_ring.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ring_style := StyleBoxFlat.new()
-	ring_style.bg_color = Color(0.0, 0.0, 0.0, 0.0)
-	ring_style.border_color = Color(0.3, 0.8, 1.0, 0.16)
-	ring_style.set_border_width_all(1)
-	ring_style.set_corner_radius_all(36)
-	inner_ring.add_theme_stylebox_override("panel", ring_style)
-	_radar_arrow_area.add_child(inner_ring)
-
-	var reticle_line_color := Color(0.3, 0.8, 1.0, 0.28)
-	_add_radar_line(Vector2(8.0, 57.5), Vector2(42.0, 1.0), reticle_line_color)
-	_add_radar_line(Vector2(66.0, 57.5), Vector2(42.0, 1.0), reticle_line_color)
-	_add_radar_line(Vector2(57.5, 8.0), Vector2(1.0, 42.0), reticle_line_color)
-	_add_radar_line(Vector2(57.5, 66.0), Vector2(1.0, 42.0), reticle_line_color)
-
-	_radar_center_glow = Panel.new()
-	_radar_center_glow.name = "PlayerDotGlow"
-	_radar_center_glow.position = Vector2(51.0, 51.0)
-	_radar_center_glow.size = Vector2(14.0, 14.0)
-	_radar_center_glow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var glow_style := StyleBoxFlat.new()
-	glow_style.bg_color = Color(0.8, 0.95, 1.0, 0.24)
-	glow_style.set_corner_radius_all(7)
-	_radar_center_glow.add_theme_stylebox_override("panel", glow_style)
-	_radar_arrow_area.add_child(_radar_center_glow)
-
-	_radar_center_dot = Panel.new()
-	_radar_center_dot.name = "PlayerDot"
-	_radar_center_dot.position = Vector2(55.0, 55.0)
-	_radar_center_dot.size = Vector2(6.0, 6.0)
-	_radar_center_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var dot_style := StyleBoxFlat.new()
-	dot_style.bg_color = Color(0.92, 0.98, 1.0, 1.0)
-	dot_style.set_corner_radius_all(3)
-	_radar_center_dot.add_theme_stylebox_override("panel", dot_style)
-	_radar_arrow_area.add_child(_radar_center_dot)
-	for index in total_rituals_required:
-		var altar_marker := Label.new()
-		altar_marker.name = "RitualMarker_%02d" % (index + 1)
-		altar_marker.text = "◆"
-		altar_marker.size = Vector2(16.0, 16.0)
-		altar_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		altar_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		altar_marker.add_theme_font_size_override("font_size", 14)
-		altar_marker.add_theme_color_override("font_color", Color(ALTAR_MARKER_COLOR_HEX))
-		altar_marker.add_theme_color_override("font_outline_color", Color(0.06, 0.025, 0.0, 1.0))
-		altar_marker.add_theme_constant_override("outline_size", 2)
-		altar_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		altar_marker.visible = false
-		_radar_arrow_area.add_child(altar_marker)
-		_radar_altar_markers.append(altar_marker)
-
-	_radar_arrow = Label.new()
-	_radar_arrow.name = "ThreatArrow"
-	_radar_arrow.text = "▲"
-	_radar_arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_radar_arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_radar_arrow.size = Vector2(16.0, 16.0)
-	_radar_arrow.visible = false
-	_radar_arrow.add_theme_font_size_override("font_size", 15)
-	_radar_arrow.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3, 0.9))
-	_radar_arrow.add_theme_color_override("font_outline_color", Color(0.05, 0.01, 0.02, 1.0))
-	_radar_arrow.add_theme_constant_override("outline_size", 1)
-	_radar_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_arrow_area.add_child(_radar_arrow)
-	_radar_enemy_arrows.append(_radar_arrow)
-
-	_radar_exit_gate_marker = Label.new()
-	_radar_exit_gate_marker.name = "ExitGateMarker"
-	_radar_exit_gate_marker.text = "■"
-	_radar_exit_gate_marker.size = Vector2(10.0, 10.0)
-	_radar_exit_gate_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_radar_exit_gate_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_radar_exit_gate_marker.add_theme_font_size_override("font_size", 12)
-	_radar_exit_gate_marker.add_theme_color_override("font_color", Color(EXIT_GATE_MARKER_COLOR_HEX))
-	_radar_exit_gate_marker.add_theme_color_override("font_outline_color", Color(0.01, 0.04, 0.015, 1.0))
-	_radar_exit_gate_marker.add_theme_constant_override("outline_size", 2)
-	_radar_exit_gate_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_exit_gate_marker.visible = false
-	_radar_arrow_area.add_child(_radar_exit_gate_marker)
-
-	_radar_relic_delivery_marker = Label.new()
-	_radar_relic_delivery_marker.name = "RelicDeliveryMarker"
-	_radar_relic_delivery_marker.text = "#"
-	_radar_relic_delivery_marker.size = Vector2(14.0, 14.0)
-	_radar_relic_delivery_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_radar_relic_delivery_marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_radar_relic_delivery_marker.add_theme_font_size_override("font_size", 14)
-	_radar_relic_delivery_marker.add_theme_color_override("font_color", RITUAL_DELIVERY_MARKER_COLOR)
-	_radar_relic_delivery_marker.add_theme_color_override("font_outline_color", Color(0.0, 0.08, 0.08, 1.0))
-	_radar_relic_delivery_marker.add_theme_constant_override("outline_size", 2)
-	_radar_relic_delivery_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_relic_delivery_marker.visible = false
-	_radar_arrow_area.add_child(_radar_relic_delivery_marker)
-
-	_radar_distance_label = Label.new()
-	_radar_distance_label.name = "ThreatDistance"
-	_radar_distance_label.text = "LEJANÍA DEL ENEMIGO: --.- m"
-	_radar_distance_label.position = Vector2(0.0, 0.0)
-	_radar_distance_label.size = Vector2(220.0, 17.0)
-	_radar_distance_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_radar_distance_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_radar_distance_label.add_theme_font_size_override("font_size", 13)
-	_radar_distance_settings = LabelSettings.new()
-	_radar_distance_settings.font_size = 13
-	_radar_distance_settings.font_color = Color(0.7, 0.9, 1.0, 1.0)
-	_radar_distance_settings.outline_color = Color(0.01, 0.025, 0.04, 0.9)
-	_radar_distance_settings.outline_size = 2
-	_radar_distance_settings.shadow_color = Color(0.3, 0.8, 1.0, 0.24)
-	_radar_distance_settings.shadow_size = 3
-	_radar_distance_settings.shadow_offset = Vector2(0.0, 1.0)
-	_radar_distance_label.label_settings = _radar_distance_settings
-	_radar_distance_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_root.add_child(_radar_distance_label)
-
-	_radar_root.visible = true
-
-
-func _create_damage_feedback_ui() -> void:
-	_damage_flash_layer = CanvasLayer.new()
-	_damage_flash_layer.name = "DamageFeedbackLayer"
-	_damage_flash_layer.layer = 7
-	add_child(_damage_flash_layer)
-
-	_damage_flash_rect = ColorRect.new()
-	_damage_flash_rect.name = "DamageFlash"
-	_damage_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_damage_flash_rect.offset_left = 0.0
-	_damage_flash_rect.offset_top = 0.0
-	_damage_flash_rect.offset_right = 0.0
-	_damage_flash_rect.offset_bottom = 0.0
-	_damage_flash_rect.color = Color(1.0, 0.0, 0.0, 0.0)
-	_damage_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_damage_flash_layer.add_child(_damage_flash_rect)
-
-	_purification_flash_layer = CanvasLayer.new()
-	_purification_flash_layer.name = "PurificationFlashLayer"
-	_purification_flash_layer.layer = 100
-	_purification_flash_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(_purification_flash_layer)
-
-	_purification_flash_rect = ColorRect.new()
-	_purification_flash_rect.name = "PurificationFlash"
-	_purification_flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_purification_flash_rect.offset_left = 0.0
-	_purification_flash_rect.offset_top = 0.0
-	_purification_flash_rect.offset_right = 0.0
-	_purification_flash_rect.offset_bottom = 0.0
-	_purification_flash_rect.color = Color(1.0, 1.0, 1.0, 0.0)
-	_purification_flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_purification_flash_layer.add_child(_purification_flash_rect)
-
-
-func _add_radar_line(line_position: Vector2, line_size: Vector2, line_color: Color) -> void:
-	var line := ColorRect.new()
-	line.position = line_position
-	line.size = line_size
-	line.color = line_color
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_arrow_area.add_child(line)
 
 
 func set_enemies(enemy_list: Array[CharacterBody3D]) -> void:
@@ -475,19 +270,8 @@ func _refresh_radar_enemies() -> void:
 
 func _ensure_enemy_radar_arrows(required_count: int) -> void:
 	while _radar_enemy_arrows.size() < required_count:
-		var index: int = _radar_enemy_arrows.size()
-		var arrow := Label.new()
-		arrow.name = "ThreatArrow_%02d" % (index + 1)
-		arrow.text = "▲"
-		arrow.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		arrow.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		arrow.size = Vector2(16.0, 16.0)
-		arrow.visible = false
-		arrow.add_theme_font_size_override("font_size", 15)
-		arrow.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3, 0.9))
-		arrow.add_theme_color_override("font_outline_color", Color(0.05, 0.01, 0.02, 1.0))
-		arrow.add_theme_constant_override("outline_size", 1)
-		arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var arrow := enemy_marker_scene.instantiate() as Label
+		arrow.name = "ThreatArrow_%02d" % (_radar_enemy_arrows.size() + 1)
 		_radar_arrow_area.add_child(arrow)
 		_radar_enemy_arrows.append(arrow)
 
@@ -572,17 +356,8 @@ func _update_health_skull_radar_markers(radar_center: Vector2) -> void:
 		live_ids[marker_id] = true
 		var marker := _radar_skull_markers.get(marker_id) as Label
 		if marker == null or not is_instance_valid(marker):
-			marker = Label.new()
+			marker = skull_marker_scene.instantiate() as Label
 			marker.name = "HealthSkullMarker_%d" % marker_id
-			marker.text = "■"
-			marker.size = Vector2(14.0, 14.0)
-			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			marker.add_theme_font_size_override("font_size", 14)
-			marker.add_theme_color_override("font_color", Color(0.2, 0.6, 1.0))
-			marker.add_theme_color_override("font_outline_color", Color(0.02, 0.08, 0.2, 1.0))
-			marker.add_theme_constant_override("outline_size", 2)
-			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_radar_arrow_area.add_child(marker)
 			_radar_skull_markers[marker_id] = marker
 		var toward_skull: Vector3 = skull_node.global_position - global_position
@@ -623,17 +398,8 @@ func _update_pumpkin_radar_markers(radar_center: Vector2) -> void:
 		live_ids[marker_id] = true
 		var marker := _radar_pumpkin_markers.get(marker_id) as Label
 		if marker == null or not is_instance_valid(marker):
-			marker = Label.new()
+			marker = pumpkin_marker_scene.instantiate() as Label
 			marker.name = "PumpkinMarker_%d" % marker_id
-			marker.text = "●"
-			marker.size = Vector2(14.0, 14.0)
-			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			marker.add_theme_font_size_override("font_size", 14)
-			marker.add_theme_color_override("font_color", Color(PUMPKIN_MARKER_COLOR_HEX))
-			marker.add_theme_color_override("font_outline_color", Color(0.12, 0.035, 0.0, 1.0))
-			marker.add_theme_constant_override("outline_size", 2)
-			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_radar_arrow_area.add_child(marker)
 			_radar_pumpkin_markers[marker_id] = marker
 		var toward_pumpkin: Vector3 = pumpkin_node.global_position - global_position
@@ -676,17 +442,8 @@ func _update_absolute_relic_radar_markers(radar_center: Vector2) -> void:
 		live_ids[marker_id] = true
 		var marker := _radar_absolute_relic_markers.get(marker_id) as Label
 		if marker == null or not is_instance_valid(marker):
-			marker = Label.new()
+			marker = relic_marker_scene.instantiate() as Label
 			marker.name = "AbsoluteRitualRelicMarker_%d" % marker_id
-			marker.text = "t"
-			marker.size = Vector2(14.0, 14.0)
-			marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			marker.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			marker.add_theme_font_size_override("font_size", 13)
-			marker.add_theme_color_override("font_color", ABSOLUTE_RELIC_MARKER_COLOR)
-			marker.add_theme_color_override("font_outline_color", Color(0.12, 0.025, 0.07, 1.0))
-			marker.add_theme_constant_override("outline_size", 2)
-			marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			_radar_arrow_area.add_child(marker)
 			_radar_absolute_relic_markers[marker_id] = marker
 		var toward_relic: Vector3 = relic_node.global_position - global_position
@@ -759,124 +516,25 @@ func configure_level(level_number: int, ritual_count: int, absolute_relic_count:
 func show_level_intro(level_number: int) -> void:
 	if current_level_number != level_number or level_number < 1 or _level_2_intro_layer != null:
 		return
+	var manager := get_node("/root/GameManager")
+	if bool(manager.get("skip_next_intro")):
+		manager.set("skip_next_intro", false)
+		_log("intro_skipped", {"source": "main_menu"})
+		return
 	get_tree().paused = true
 	set_meta("level_2_intro_active", true)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	countdown_time = _countdown_duration_for_level(level_number)
-	_level_2_intro_layer = CanvasLayer.new()
-	_level_2_intro_layer.name = "Level2IntroLayer"
-	_level_2_intro_layer.layer = 40
-	_level_2_intro_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_level_2_intro_layer = intro_scenes[level_number - 1].instantiate() as CanvasLayer
 	add_child(_level_2_intro_layer)
 	_add_transition_skip_input(_level_2_intro_layer)
-
-	var backdrop := TextureRect.new()
-	backdrop.name = "Backdrop"
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.stretch_mode = TextureRect.STRETCH_SCALE
-	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
-	backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
-	_apply_intro_gradient(backdrop)
-	_level_2_intro_layer.add_child(backdrop)
-
-	var skip_hint := Label.new()
-	skip_hint.name = "SkipHint"
-	skip_hint.text = "Presiona ENTER para saltar"
-	skip_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	skip_hint.offset_left = -360.0
-	skip_hint.offset_top = -48.0
-	skip_hint.offset_right = -28.0
-	skip_hint.offset_bottom = -16.0
-	skip_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	skip_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	skip_hint.add_theme_color_override("font_color", Color("#CCCCCC"))
-	skip_hint.add_theme_font_size_override("font_size", 14)
-	skip_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	skip_hint.process_mode = Node.PROCESS_MODE_ALWAYS
-	_level_2_intro_layer.add_child(skip_hint)
-
-	var panel := PanelContainer.new()
-	panel.name = "Level2Announcement"
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -390.0
-	panel.offset_top = -230.0
-	panel.offset_right = 390.0
-	panel.offset_bottom = 230.0
-	panel.process_mode = Node.PROCESS_MODE_ALWAYS
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.035, 0.025, 0.06, 0.84)
-	panel_style.border_color = Color(0.24, 0.58, 0.95, 0.95)
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(10)
-	panel_style.content_margin_left = 30.0
-	panel_style.content_margin_right = 30.0
-	panel_style.content_margin_top = 26.0
-	panel_style.content_margin_bottom = 26.0
-	panel.add_theme_stylebox_override("panel", panel_style)
-	_level_2_intro_layer.add_child(panel)
-
-	var layout := VBoxContainer.new()
-	layout.alignment = BoxContainer.ALIGNMENT_CENTER
-	layout.add_theme_constant_override("separation", 18)
-	layout.process_mode = Node.PROCESS_MODE_ALWAYS
-	panel.add_child(layout)
-
-	var title := Label.new()
-	match level_number:
-		1:
-			title.text = "¡NIVEL 1: EL CEMENTERIO OLVIDADO!"
-		2:
-			title.text = "¡NIVEL 2: PESADILLA DE MEDIANOCHE!"
-		3:
-			title.text = "¡NIVEL 3: COSECHA Y SACRIFICIO!"
-		_:
-			title.text = "¡NIVEL 4: EL RITUAL ABSOLUTO!"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	title.add_theme_font_size_override("font_size", 25)
-	title.add_theme_color_override("font_color", Color(0.65, 0.82, 1.0))
-	layout.add_child(title)
-
-	var instructions := RichTextLabel.new()
-	instructions.bbcode_enabled = true
-	instructions.scroll_active = false
-	instructions.fit_content = true
-	instructions.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	match level_number:
-		1:
-			instructions.text = "MECÁNICA PRINCIPAL: ECO EN LOS ALTARES\n• Aprende a moverte en sigilo y enciende los 2 altares ([color=#FFAA00]◆[/color]) usando la tecla 'Q'.\n• Sigue el portón ([color=#00FF66]■[/color]) para escapar."
-		2:
-			instructions.text = "MECÁNICA PRINCIPAL: LUZ EN EL CAMINO\n• Encuentra cráneos ([color=#3399FF]■[/color]) en el suelo para recuperar 1 bloque de vida usando la tecla 'R'.\n• Si recoges los 3 cráneos ([color=#3399FF]■[/color]), reaparecerán uno a uno cada 30 segundos.\n• Se desactiva la curación pasiva. Mantente alerta de los 3 enemigos.\n• Enciende los 4 altares ([color=#FFAA00]◆[/color]) con la tecla 'Q' y sigue el portón ([color=#00FF66]■[/color]) para escapar."
-		3:
-			instructions.text = "MECÁNICA PRINCIPAL: CALABAZAS MALDITAS\n• Encuentra las 7 calabazas ([color=#FFA500]●[/color]) y arráncalas del suelo usando la tecla 'F'.\n• Los altares ([color=#FFAA00]◆[/color]) permanecerán bloqueados hasta que reúnas todas las calabazas.\n• Recoge cráneos ([color=#3399FF]■[/color]) con la tecla 'R' para curarte y mantente alerta de los 3 enemigos."
-		_:
-			instructions.text = "MECÁNICA PRINCIPAL: PROFANACIÓN Y UN ÚLTIMO ENJAMBRE\n• Reúne las 4 calabazas ([color=#FF8000]●[/color]) con la tecla 'F' para desbloquear los restos ([color=#FFB6C1]t[/color]).\n• Transporta los 2 restos ([color=#FFB6C1]t[/color]) frente al portón ([color=#40E0D0]#[/color]) con la tecla 'T' (velocidad reducida; solo podrás correr si te ha visto el enemigo).\n• Enciende los 4 altares ([color=#FFAA00]◆[/color]) con la tecla 'Q' para abrir la salida ([color=#00FF66]■[/color]).\n• Sobrevive a los 4 enemigos del enjambre."
-	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	instructions.add_theme_font_size_override("normal_font_size", 17)
-	instructions.add_theme_color_override("default_color", Color(0.92, 0.89, 0.96))
-	layout.add_child(instructions)
-
-	var countdown := Label.new()
-	countdown.name = "Countdown"
-	countdown.text = "El juego comienza en: %d..." % countdown_time
-	countdown.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	countdown.add_theme_font_size_override("font_size", 22)
-	countdown.add_theme_color_override("font_color", Color(1.0, 0.78, 0.36))
-	countdown.process_mode = Node.PROCESS_MODE_ALWAYS
-	_level_2_intro_countdown_label = countdown
-	layout.add_child(countdown)
-
-	_level_2_intro_timer = Timer.new()
-	_level_2_intro_timer.name = "Level2IntroCountdownTimer"
-	_level_2_intro_timer.wait_time = 1.0
-	_level_2_intro_timer.one_shot = false
-	_level_2_intro_timer.autostart = false
-	_level_2_intro_timer.ignore_time_scale = true
-	_level_2_intro_timer.process_callback = Timer.TIMER_PROCESS_IDLE
-	_level_2_intro_timer.process_mode = Node.PROCESS_MODE_ALWAYS
-	_level_2_intro_layer.add_child(_level_2_intro_timer)
+	_level_2_intro_countdown_label = _level_2_intro_layer.get_node("Level2Announcement/Content/Countdown") as Label
+	_level_2_intro_timer = _level_2_intro_layer.get_node("Level2IntroCountdownTimer") as Timer
+	_level_2_intro_countdown_label.text = "El juego comienza en: %d..." % countdown_time
 	_level_2_intro_timer.timeout.connect(_on_level_2_intro_countdown)
-	_level_2_intro_timer.start(1.0)
+	_level_2_intro_layer.get_node("Level2Announcement/Content/SkipMenuButton").pressed.connect(_on_transition_skip_requested)
+	_level_2_intro_timer.start()
+	_log("intro_shown")
 
 
 func _countdown_duration_for_level(level_number: int) -> int:
@@ -890,21 +548,10 @@ func _countdown_duration_for_level(level_number: int) -> int:
 	return 10
 
 
-func _apply_intro_gradient(background_rect: TextureRect) -> void:
-	var gradient := Gradient.new()
-	gradient.set_color(0, Color("#050814"))
-	gradient.set_color(1, Color("#120919"))
-
-	var gradient_texture := GradientTexture2D.new()
-	gradient_texture.gradient = gradient
-	gradient_texture.fill_from = Vector2(0.5, 0.0)
-	gradient_texture.fill_to = Vector2(0.5, 1.0)
-	background_rect.texture = gradient_texture
-
-
 func _finish_level_intro() -> void:
 	if _level_2_intro_layer == null or not is_instance_valid(_level_2_intro_layer):
 		return
+	_log("intro_finished")
 	if _level_2_intro_timer != null:
 		_level_2_intro_timer.stop()
 	_level_2_intro_layer.queue_free()
@@ -1092,6 +739,7 @@ func take_damage(amount: int = 1) -> void:
 	if current_health == previous_health:
 		return
 	_regeneration_timer = regeneration_delay
+	_log("damage_taken", {"amount": previous_health - current_health, "health": current_health})
 	health_changed.emit(current_health, max_health)
 	play_sound_effect(SFX_ENEMY_HIT)
 	_play_damage_feedback()
@@ -1102,7 +750,9 @@ func take_damage(amount: int = 1) -> void:
 func heal(amount: int) -> void:
 	if is_dead or amount <= 0:
 		return
+	var before_heal := current_health
 	current_health = mini(current_health + amount, max_health)
+	_log("health_restored", {"amount": current_health - before_heal, "health": current_health})
 	_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
 	update_health_ui()
 
@@ -1141,12 +791,10 @@ func _play_damage_feedback() -> void:
 
 
 func _shake_camera() -> void:
-	if camera == null or not is_instance_valid(camera):
+	if camera_shake == null:
 		return
 	if _camera_shake_tween != null and _camera_shake_tween.is_running():
 		_camera_shake_tween.kill()
-	var rest_position := _camera_rest_position()
-	camera.position = rest_position
 	_camera_shake_tween = create_tween()
 	_camera_shake_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	for _index in range(6):
@@ -1155,19 +803,38 @@ func _shake_camera() -> void:
 			randf_range(-camera_shake_intensity * 0.65, camera_shake_intensity * 0.65),
 			0.0
 		)
-		_camera_shake_tween.tween_property(camera, "position", rest_position + shake_offset, 0.025).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	_camera_shake_tween.tween_property(camera, "position", rest_position, 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+		_camera_shake_tween.tween_property(camera_shake, "position", shake_offset, 0.025).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_camera_shake_tween.tween_property(camera_shake, "position", Vector3.ZERO, 0.05).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 
 
 func _camera_rest_position() -> Vector3:
 	var result := _camera_base_position
-	var height_ratio: float = 1.0
-	if is_crouching:
-		height_ratio = 0.5
-	if is_hiding:
-		height_ratio = minf(height_ratio, hiding_camera_height_ratio)
-	result.y = _standing_camera_height * height_ratio
+	var standing_height := _standing_camera_height * (0.5 if is_crouching else 1.0)
+	var hidden_height := _standing_camera_height * minf(0.5 if is_crouching else 1.0, hiding_camera_height_ratio) - 0.08
+	result.y = lerpf(standing_height, hidden_height, _hiding_camera_weight)
+	result.z += 0.12 * _hiding_camera_weight
 	return result
+
+
+func _apply_camera_pose() -> void:
+	# Independent authored offsets prevent animation, mouse look and hit feedback
+	# from overwriting one another. None of these nodes moves the body collider.
+	if camera == null or not is_instance_valid(camera):
+		return
+	var visual_position := hiding_motion.position if hiding_motion != null else Vector3.ZERO
+	var visual_rotation := hiding_motion.rotation if hiding_motion != null else Vector3.ZERO
+	var hit_offset := camera_shake.position if camera_shake != null else Vector3.ZERO
+	camera.position = _camera_rest_position() + visual_position + hit_offset
+	camera.rotation = Vector3(_pitch, _camera_base_rotation.y, _camera_base_rotation.z) + visual_rotation
+
+
+func _on_hiding_animation_finished(animation_name: StringName) -> void:
+	if animation_name == &"hide_enter" and is_hiding:
+		hiding_animation.play("hide_hold", 0.08)
+	elif animation_name == &"hide_exit" and not is_hiding:
+		if _hiding_overlay_layer != null:
+			_hiding_overlay_layer.visible = false
+	_apply_camera_pose()
 
 
 func _die() -> void:
@@ -1177,6 +844,7 @@ func _die() -> void:
 	get_node("/root/LevelManager").call("stop_level_timer")
 	get_node("/root/LevelManager").call("refresh_time_score_hud")
 	is_dead = true
+	_log("player_died", {"health": current_health})
 	play_sound_effect(SFX_LOSE, true)
 	freeze_controls()
 	get_tree().paused = true
@@ -1185,14 +853,14 @@ func _die() -> void:
 
 
 func _add_transition_skip_input(parent: Node) -> void:
-	var skip_input: Node = TRANSITION_SKIP_INPUT_SCRIPT.new()
-	skip_input.name = "TransitionSkipInput"
-	parent.add_child(skip_input)
-	skip_input.connect("skip_requested", _on_transition_skip_requested)
+	var skip_input := parent.get_node_or_null("TransitionSkipInput")
+	if skip_input != null:
+		skip_input.connect("skip_requested", _on_transition_skip_requested)
 
 
 func _on_transition_skip_requested() -> void:
 	if _level_2_intro_layer != null and is_instance_valid(_level_2_intro_layer):
+		_log("intro_skipped", {"source": "button_or_enter"})
 		_finish_level_intro()
 	elif _victory_screen_layer != null and is_instance_valid(_victory_screen_layer) and current_level_number < 4:
 		_continue_to_next_level()
@@ -1204,7 +872,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and camera != null:
 		rotate_y(-event.relative.x * mouse_sensitivity)
 		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity, deg_to_rad(-85.0), deg_to_rad(85.0))
-		camera.rotation.x = _pitch
+		_apply_camera_pose()
 	if event.is_action_pressed("ritual_interact"):
 		_try_light_nearby_altar()
 	if event.is_action_pressed("absolute_ritual_interact"):
@@ -1254,15 +922,13 @@ func carry_absolute_ritual_relic(relic: Node3D) -> bool:
 		return false
 	var carry_anchor := get_node_or_null("AbsoluteRitualCarryAnchor") as Node3D
 	if carry_anchor == null:
-		carry_anchor = Node3D.new()
-		carry_anchor.name = "AbsoluteRitualCarryAnchor"
-		carry_anchor.position = Vector3(0.0, 0.15, -0.9)
-		add_child(carry_anchor)
+		return false
 	relic.reparent(carry_anchor)
 	relic.position = Vector3(0.18, -0.22, 0.0)
 	relic.rotation = Vector3.ZERO
 	carried_absolute_ritual_relic = relic
 	is_carrying_absolute_ritual_relic = true
+	_log("relic_picked_up", {"object": str(relic.name)})
 	is_running = false
 	_update_crouch_state(false)
 	_set_carried_relic_visible(not is_hidden)
@@ -1273,6 +939,7 @@ func release_absolute_ritual_relic() -> Node3D:
 	if not is_carrying_absolute_ritual_relic:
 		return null
 	var relic := carried_absolute_ritual_relic
+	_log("relic_released", {"object": str(relic.name) if is_instance_valid(relic) else ""})
 	if relic != null and is_instance_valid(relic):
 		_set_visual_tree_visible(relic.get_node_or_null("RelicVisual"), true)
 	carried_absolute_ritual_relic = null
@@ -1299,6 +966,9 @@ func collect_pumpkin() -> void:
 	if current_level_number < 3 or pumpkins_collected >= _pumpkin_requirement_for_current_level():
 		return
 	pumpkins_collected += 1
+	_log("pumpkin_collected", {"collected": pumpkins_collected, "required": _pumpkin_requirement_for_current_level()})
+	if pumpkins_collected == _pumpkin_requirement_for_current_level():
+		_log("mission_completed", {"mission": "pumpkins"})
 	play_sound_effect(SFX_PUMPKIN)
 	_update_ritual_counter_ui()
 
@@ -1354,7 +1024,10 @@ func _physics_process(delta: float) -> void:
 	var sprint_requested: bool = Input.is_action_pressed("sprint")
 	var can_sprint_while_carrying: bool = is_carrying_absolute_ritual_relic and _is_any_enemy_chasing()
 	var can_sprint: bool = can_sprint_while_carrying if is_carrying_absolute_ritual_relic else not is_crouching
+	var was_running := is_running
 	is_running = has_movement_input and sprint_requested and can_sprint
+	if was_running != is_running:
+		_log("sprint_started" if is_running else "sprint_ended")
 	var current_speed: float = walk_speed
 	if is_carrying_absolute_ritual_relic:
 		# Carrying remains slower than standing, but is a little faster than crouch.
@@ -1378,6 +1051,7 @@ func _physics_process(delta: float) -> void:
 		var jump_pressed: bool = Input.is_action_just_pressed("jump")
 		if jump_pressed and not is_hiding and (not is_crouching or can_jump_while_carrying):
 			velocity.y = jump_velocity
+			_log("jumped")
 		else:
 			velocity.y = 0.0
 	else:
@@ -1386,18 +1060,6 @@ func _physics_process(delta: float) -> void:
 	var horizontal_motion: bool = absf(velocity.x) > 0.01 or absf(velocity.z) > 0.01
 	_update_footstep_audio(is_on_floor() and horizontal_motion and is_running)
 	_update_noise(delta, input_vector.length_squared() > 0.0)
-
-
-func _create_footstep_player() -> void:
-	walk_audio_player = AudioStreamPlayer.new()
-	walk_audio_player.name = "FootstepAudioPlayer"
-	var walk_stream := SFX_WALK.duplicate() as AudioStreamWAV
-	if walk_stream != null:
-		walk_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	walk_audio_player.stream = walk_stream if walk_stream != null else SFX_WALK
-	walk_audio_player.volume_db = -8.0
-	walk_audio_player.process_mode = Node.PROCESS_MODE_INHERIT
-	add_child(walk_audio_player)
 
 
 func _update_footstep_audio(should_play: bool) -> void:
@@ -1413,7 +1075,7 @@ func _update_footstep_audio(should_play: bool) -> void:
 func play_sound_effect(stream: AudioStream, process_always: bool = false, pitch_scale: float = 1.0) -> void:
 	if stream == null:
 		return
-	var audio_player := AudioStreamPlayer.new()
+	var audio_player := sound_effect_scene.instantiate() as AudioStreamPlayer
 	audio_player.stream = stream
 	audio_player.pitch_scale = maxf(pitch_scale, 0.01)
 	audio_player.process_mode = Node.PROCESS_MODE_ALWAYS if process_always else Node.PROCESS_MODE_INHERIT
@@ -1451,16 +1113,9 @@ func _configure_hiding_ray() -> void:
 		return
 	if hiding_ray == null:
 		hiding_ray = camera.get_node_or_null("HidingRay") as RayCast3D
-	if hiding_ray == null:
-		hiding_ray = RayCast3D.new()
-		hiding_ray.name = "HidingRay"
-		camera.add_child(hiding_ray)
-	hiding_ray.target_position = Vector3(0.0, 0.0, -hiding_detection_distance)
-	hiding_ray.collision_mask = 1
-	hiding_ray.collide_with_areas = false
-	hiding_ray.collide_with_bodies = true
-	hiding_ray.enabled = true
-	hiding_ray.add_exception(self)
+	if hiding_ray != null:
+		hiding_detection_distance = hiding_ray.target_position.length()
+		hiding_ray.add_exception(self)
 
 
 func _get_hiding_cover_target() -> Node3D:
@@ -1486,375 +1141,6 @@ func _is_leaf_tree_cover(target: Node3D) -> bool:
 			return true
 		candidate = candidate.get_parent()
 	return false
-
-
-func _create_interaction_prompt() -> void:
-	if _radar_layer == null:
-		return
-	_interaction_prompt = Label.new()
-	_interaction_prompt.name = "InteractionPrompt"
-	_interaction_prompt.text = "[E] Esconderse detrás del objeto"
-	_interaction_prompt.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	_interaction_prompt.anchor_left = 0.5
-	_interaction_prompt.anchor_right = 0.5
-	_interaction_prompt.anchor_top = 1.0
-	_interaction_prompt.anchor_bottom = 1.0
-	_interaction_prompt.offset_left = -400.0
-	_interaction_prompt.offset_right = 400.0
-	_interaction_prompt.offset_top = -72.0
-	_interaction_prompt.offset_bottom = -42.0
-	_interaction_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_interaction_prompt.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_interaction_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_interaction_prompt.visible = false
-	var prompt_settings := LabelSettings.new()
-	prompt_settings.font_size = 17
-	prompt_settings.font_color = Color(0.85, 0.95, 1.0, 0.95)
-	prompt_settings.outline_color = Color(0.01, 0.02, 0.03, 0.95)
-	prompt_settings.outline_size = 4
-	prompt_settings.shadow_color = Color(0.0, 0.0, 0.0, 0.8)
-	prompt_settings.shadow_size = 4
-	prompt_settings.shadow_offset = Vector2(1.0, 2.0)
-	_interaction_prompt.label_settings = prompt_settings
-	_radar_layer.add_child(_interaction_prompt)
-
-
-func _create_breath_hud() -> void:
-	if _radar_layer == null:
-		return
-	_hiding_overlay_layer = CanvasLayer.new()
-	_hiding_overlay_layer.name = "HidingVisionOverlay"
-	_hiding_overlay_layer.layer = 5
-	_hiding_overlay_layer.process_mode = Node.PROCESS_MODE_ALWAYS
-	add_child(_hiding_overlay_layer)
-	var overlay_root := Control.new()
-	overlay_root.name = "OverlayRoot"
-	overlay_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	overlay_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hiding_overlay_layer.add_child(overlay_root)
-	_hiding_overlay = ColorRect.new()
-	_hiding_overlay.name = "DarkenedView"
-	_hiding_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_hiding_overlay.color = Color(0.015, 0.02, 0.03, 0.3)
-	_hiding_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	overlay_root.add_child(_hiding_overlay)
-	for edge in ["Top", "Bottom", "Left", "Right"]:
-		var vignette_edge := ColorRect.new()
-		vignette_edge.name = "Vignette" + edge
-		vignette_edge.color = Color(0.0, 0.005, 0.012, 0.24)
-		vignette_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		match edge:
-			"Top":
-				vignette_edge.anchor_right = 1.0
-				vignette_edge.offset_bottom = 78.0
-			"Bottom":
-				vignette_edge.anchor_left = 0.0
-				vignette_edge.anchor_top = 1.0
-				vignette_edge.anchor_right = 1.0
-				vignette_edge.anchor_bottom = 1.0
-				vignette_edge.offset_top = -78.0
-			"Left":
-				vignette_edge.anchor_bottom = 1.0
-				vignette_edge.offset_right = 64.0
-			"Right":
-				vignette_edge.anchor_left = 1.0
-				vignette_edge.anchor_top = 0.0
-				vignette_edge.anchor_right = 1.0
-				vignette_edge.anchor_bottom = 1.0
-				vignette_edge.offset_left = -64.0
-		overlay_root.add_child(vignette_edge)
-	_hiding_overlay_layer.visible = false
-
-	breath_label = Label.new()
-	breath_label.name = "BreathLabel"
-	breath_label.text = "Aguantando la respiración  5..."
-	breath_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	breath_label.anchor_left = 0.5
-	breath_label.anchor_right = 0.5
-	breath_label.anchor_top = 1.0
-	breath_label.anchor_bottom = 1.0
-	breath_label.offset_left = -220.0
-	breath_label.offset_right = 220.0
-	breath_label.offset_top = -104.0
-	breath_label.offset_bottom = -78.0
-	breath_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	breath_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	breath_label.add_theme_font_size_override("font_size", 14)
-	breath_label.add_theme_color_override("font_color", Color(0.72, 0.86, 0.92, 0.82))
-	breath_label.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.03, 0.95))
-	breath_label.add_theme_constant_override("outline_size", 3)
-	breath_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	breath_label.visible = false
-	_radar_layer.add_child(breath_label)
-
-
-func _create_ritual_ui() -> void:
-	if _radar_layer == null:
-		return
-	_objective_container = VBoxContainer.new()
-	_objective_container.name = "ObjectiveList"
-	_objective_container.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_objective_container.offset_left = -720.0
-	_objective_container.offset_right = -28.0
-	_objective_container.offset_top = 18.0
-	_objective_container.offset_bottom = 250.0
-	_objective_container.alignment = BoxContainer.ALIGNMENT_BEGIN
-	_objective_container.add_theme_constant_override("separation", 2)
-	_objective_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_radar_layer.add_child(_objective_container)
-
-	var counter_font := SystemFont.new()
-	counter_font.font_names = PackedStringArray(["Arial"])
-	counter_font.font_weight = 700
-	_objective_counter_font = counter_font
-	var instruction_font := SystemFont.new()
-	instruction_font.font_names = PackedStringArray(["Georgia"])
-	instruction_font.font_weight = 500
-	_objective_instruction_font = instruction_font
-
-	_pumpkin_counter_label = RichTextLabel.new()
-	_pumpkin_counter_label.name = "PumpkinCounter"
-	_pumpkin_counter_label.bbcode_enabled = true
-	_pumpkin_counter_label.scroll_active = false
-	_pumpkin_counter_label.fit_content = false
-	_pumpkin_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_pumpkin_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pumpkin_counter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pumpkin_counter_label.custom_minimum_size = Vector2(0.0, 30.0)
-	_pumpkin_counter_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_pumpkin_counter_label.add_theme_font_size_override("normal_font_size", 15)
-	_pumpkin_counter_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_pumpkin_counter_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_pumpkin_counter_label.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
-	_pumpkin_counter_label.add_theme_constant_override("outline_size", 4)
-	_pumpkin_counter_label.visible = false
-
-	_absolute_ritual_title_label = RichTextLabel.new()
-	_absolute_ritual_title_label.name = "AbsoluteRitualMissionTitle"
-	_absolute_ritual_title_label.bbcode_enabled = true
-	_absolute_ritual_title_label.scroll_active = false
-	_absolute_ritual_title_label.fit_content = false
-	_absolute_ritual_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_absolute_ritual_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_absolute_ritual_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_absolute_ritual_title_label.custom_minimum_size = Vector2(0.0, 42.0)
-	_absolute_ritual_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_absolute_ritual_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_absolute_ritual_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_absolute_ritual_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
-	_absolute_ritual_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_absolute_ritual_title_label.add_theme_constant_override("outline_size", 5)
-	_absolute_ritual_title_label.visible = false
-
-	_absolute_ritual_progress_label = RichTextLabel.new()
-	_absolute_ritual_progress_label.name = "AbsoluteRitualProgress"
-	_absolute_ritual_progress_label.bbcode_enabled = true
-	_absolute_ritual_progress_label.scroll_active = false
-	_absolute_ritual_progress_label.fit_content = false
-	_absolute_ritual_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_absolute_ritual_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_absolute_ritual_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_absolute_ritual_progress_label.custom_minimum_size = Vector2(0.0, 30.0)
-	_absolute_ritual_progress_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_absolute_ritual_progress_label.add_theme_font_size_override("normal_font_size", 15)
-	_absolute_ritual_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_absolute_ritual_progress_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_absolute_ritual_progress_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_absolute_ritual_progress_label.add_theme_constant_override("outline_size", 4)
-	_absolute_ritual_progress_label.visible = false
-
-	_ritual_counter_label = Label.new()
-	_ritual_counter_label.name = "RitualCounter"
-	_ritual_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_ritual_counter_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_ritual_counter_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ritual_counter_label.custom_minimum_size = Vector2(0.0, 36.0)
-	_ritual_counter_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var settings := LabelSettings.new()
-	settings.font_size = 18
-	settings.font_color = Color(1.0, 0.78, 0.42, 0.98)
-	settings.font = _objective_counter_font
-	settings.outline_color = Color(0.02, 0.015, 0.025, 0.95)
-	settings.outline_size = 5
-	settings.shadow_color = Color(0.0, 0.0, 0.0, 0.8)
-	settings.shadow_size = 4
-	settings.shadow_offset = Vector2(1.0, 2.0)
-	_ritual_counter_label.label_settings = settings
-
-	_ritual_mission_label = RichTextLabel.new()
-	_ritual_mission_label.name = "MissionObjective"
-	_ritual_mission_label.bbcode_enabled = true
-	_ritual_mission_label.scroll_active = false
-	_ritual_mission_label.fit_content = false
-	_ritual_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_ritual_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_ritual_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ritual_mission_label.custom_minimum_size = Vector2(0.0, 32.0)
-	_ritual_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_ritual_mission_label.add_theme_font_size_override("normal_font_size", 15)
-	_ritual_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_ritual_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_ritual_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_ritual_mission_label.add_theme_constant_override("outline_size", 4)
-
-	_altar_mission_title_label = RichTextLabel.new()
-	_altar_mission_title_label.name = "AltarMissionTitle"
-	_altar_mission_title_label.bbcode_enabled = true
-	_altar_mission_title_label.scroll_active = false
-	_altar_mission_title_label.fit_content = false
-	_altar_mission_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_altar_mission_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_altar_mission_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_altar_mission_title_label.custom_minimum_size = Vector2(0.0, 42.0)
-	_altar_mission_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_altar_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_altar_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_altar_mission_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
-	_altar_mission_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_altar_mission_title_label.add_theme_constant_override("outline_size", 5)
-	_altar_mission_title_label.visible = false
-
-	_altar_progress_label = RichTextLabel.new()
-	_altar_progress_label.name = "AltarProgress"
-	_altar_progress_label.bbcode_enabled = true
-	_altar_progress_label.scroll_active = false
-	_altar_progress_label.fit_content = false
-	_altar_progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_altar_progress_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_altar_progress_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_altar_progress_label.custom_minimum_size = Vector2(0.0, 30.0)
-	_altar_progress_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_altar_progress_label.add_theme_font_size_override("normal_font_size", 15)
-	_altar_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_altar_progress_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_altar_progress_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_altar_progress_label.add_theme_constant_override("outline_size", 4)
-	_healing_mission_label = RichTextLabel.new()
-	_healing_mission_label.name = "HealingMission"
-	_healing_mission_label.bbcode_enabled = true
-	_healing_mission_label.scroll_active = false
-	_healing_mission_label.fit_content = false
-	_healing_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_healing_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_healing_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_healing_mission_label.custom_minimum_size = Vector2(0.0, 30.0)
-	_healing_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_healing_mission_label.add_theme_font_size_override("normal_font_size", 15)
-	_healing_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_healing_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_healing_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_healing_mission_label.add_theme_constant_override("outline_size", 4)
-	_healing_mission_label.visible = false
-
-	_escape_mission_title_label = RichTextLabel.new()
-	_escape_mission_title_label.name = "EscapeMissionTitle"
-	_escape_mission_title_label.bbcode_enabled = true
-	_escape_mission_title_label.scroll_active = false
-	_escape_mission_title_label.fit_content = false
-	_escape_mission_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_escape_mission_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_escape_mission_title_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_escape_mission_title_label.custom_minimum_size = Vector2(0.0, 42.0)
-	_escape_mission_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_escape_mission_title_label.add_theme_color_override("default_color", Color(1.0, 0.78, 0.42, 1.0))
-	_escape_mission_title_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
-	_escape_mission_title_label.visible = false
-
-	_escape_mission_label = RichTextLabel.new()
-	_escape_mission_label.name = "EscapeObjective"
-	_escape_mission_label.bbcode_enabled = true
-	_escape_mission_label.scroll_active = false
-	_escape_mission_label.fit_content = false
-	_escape_mission_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_escape_mission_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_escape_mission_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_escape_mission_label.custom_minimum_size = Vector2(0.0, 32.0)
-	_escape_mission_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_escape_mission_label.add_theme_font_size_override("normal_font_size", 15)
-	_escape_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
-	_escape_mission_label.add_theme_color_override("default_color", Color(0.8, 0.8, 0.8, 1.0))
-	_escape_mission_label.add_theme_color_override("font_outline_color", Color(0.02, 0.04, 0.025, 0.95))
-	_escape_mission_label.add_theme_constant_override("outline_size", 4)
-
-	_objective_container.add_child(_ritual_counter_label)
-	_objective_container.add_child(_ritual_mission_label)
-	_objective_container.add_child(_pumpkin_counter_label)
-	_objective_container.add_child(_absolute_ritual_title_label)
-	_objective_container.add_child(_absolute_ritual_progress_label)
-	_objective_container.add_child(_altar_mission_title_label)
-	_objective_container.add_child(_altar_progress_label)
-	_objective_container.add_child(_healing_mission_label)
-	_objective_container.add_child(_escape_mission_title_label)
-	_objective_container.add_child(_escape_mission_label)
-	_apply_objective_typography()
-
-	_pumpkin_lock_message = Label.new()
-	_pumpkin_lock_message.name = "PumpkinLockMessage"
-	_pumpkin_lock_message.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_pumpkin_lock_message.anchor_left = 0.5
-	_pumpkin_lock_message.anchor_right = 0.5
-	_pumpkin_lock_message.offset_left = -430.0
-	_pumpkin_lock_message.offset_right = 430.0
-	_pumpkin_lock_message.offset_top = 132.0
-	_pumpkin_lock_message.offset_bottom = 174.0
-	_pumpkin_lock_message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_pumpkin_lock_message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_pumpkin_lock_message.text = "¡Debes recolectar %d calabazas antes de realizar los rituales!" % _pumpkin_requirement_for_current_level()
-	_pumpkin_lock_message.add_theme_font_size_override("font_size", 18)
-	_pumpkin_lock_message.add_theme_color_override("font_color", Color(1.0, 0.72, 0.42, 1.0))
-	_pumpkin_lock_message.add_theme_color_override("font_outline_color", Color(0.08, 0.025, 0.0, 1.0))
-	_pumpkin_lock_message.add_theme_constant_override("outline_size", 5)
-	_pumpkin_lock_message.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pumpkin_lock_message.visible = false
-	_radar_layer.add_child(_pumpkin_lock_message)
-	_pumpkin_lock_timer = Timer.new()
-	_pumpkin_lock_timer.name = "PumpkinLockMessageTimer"
-	_pumpkin_lock_timer.one_shot = true
-	_pumpkin_lock_timer.wait_time = 2.5
-	_pumpkin_lock_timer.timeout.connect(_hide_pumpkin_lock_message)
-	_radar_layer.add_child(_pumpkin_lock_timer)
-	update_objective_ui()
-
-
-func _apply_objective_typography() -> void:
-	if _ritual_counter_label == null or _ritual_mission_label == null:
-		return
-	if current_level_number == 1 or current_level_number == 2:
-		_ritual_mission_label.add_theme_font_override("normal_font", _objective_counter_font)
-		_ritual_mission_label.add_theme_font_size_override("normal_font_size", 24)
-		_ritual_mission_label.add_theme_constant_override("outline_size", 5)
-		_ritual_mission_label.custom_minimum_size = Vector2(0.0, 42.0)
-		_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-		_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
-		_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
-		_altar_progress_label.add_theme_font_override("normal_font", _objective_instruction_font)
-		_altar_progress_label.add_theme_font_size_override("normal_font_size", 15)
-		_healing_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
-		_healing_mission_label.add_theme_font_size_override("normal_font_size", 15)
-		_escape_mission_label.add_theme_font_override("normal_font", _objective_instruction_font)
-		_escape_mission_label.add_theme_font_size_override("normal_font_size", 15)
-		return
-	_ritual_mission_label.custom_minimum_size = Vector2(0.0, 42.0)
-	_ritual_mission_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_ritual_mission_label.add_theme_font_size_override("normal_font_size", 24)
-	_ritual_mission_label.add_theme_constant_override("outline_size", 5)
-	_altar_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_altar_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_altar_mission_title_label.add_theme_constant_override("outline_size", 5)
-	_absolute_ritual_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_absolute_ritual_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_absolute_ritual_title_label.add_theme_constant_override("outline_size", 5)
-	_escape_mission_title_label.add_theme_font_override("normal_font", _objective_counter_font)
-	_escape_mission_title_label.add_theme_font_size_override("normal_font_size", 24)
-	_escape_mission_title_label.add_theme_constant_override("outline_size", 5)
-	for objective in [_pumpkin_counter_label, _absolute_ritual_progress_label, _altar_progress_label, _healing_mission_label, _escape_mission_label]:
-		if objective == null:
-			continue
-		objective.add_theme_font_override("normal_font", _objective_instruction_font)
-		objective.add_theme_font_size_override("normal_font_size", 15)
 
 
 func _update_interaction_prompt() -> void:
@@ -1949,10 +1235,12 @@ func _try_light_nearby_altar() -> void:
 	if not altar.activate():
 		return
 	rituals_completed = mini(rituals_completed + 1, total_rituals_required)
+	_log("altar_activated", {"object": str(altar.name), "completed": rituals_completed, "required": total_rituals_required})
 	ritual_progress_changed.emit(rituals_completed, total_rituals_required)
 	_update_ritual_counter_ui()
 	noise_emitted.emit(altar.global_position, 1.0)
 	if rituals_completed >= total_rituals_required:
+		_log("mission_completed", {"mission": "altars"})
 		play_sound_effect(SFX_EXIT_UNLOCK)
 		exit_unlocked = true
 		if current_level_number == 4:
@@ -2016,7 +1304,8 @@ func _create_purification_camera_shake(duration: float) -> Tween:
 		return null
 	if _camera_shake_tween != null and _camera_shake_tween.is_running():
 		_camera_shake_tween.kill()
-	var rest_position := _camera_rest_position()
+	if camera_shake == null:
+		return null
 	var shake_tween := create_tween()
 	shake_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 	var segment_count: int = maxi(1, ceili(duration / 0.06))
@@ -2027,8 +1316,8 @@ func _create_purification_camera_shake(duration: float) -> Tween:
 			randf_range(-0.035, 0.035),
 			0.0
 		)
-		shake_tween.tween_property(camera, "position", rest_position + offset, segment_duration)
-	shake_tween.tween_property(camera, "position", rest_position, 0.08)
+		shake_tween.tween_property(camera_shake, "position", offset, segment_duration)
+	shake_tween.tween_property(camera_shake, "position", Vector3.ZERO, 0.08)
 	_camera_shake_tween = shake_tween
 	return shake_tween
 
@@ -2052,7 +1341,6 @@ func _update_ritual_counter_ui() -> void:
 func update_objective_ui() -> void:
 	if _objective_container == null:
 		return
-	_apply_objective_typography()
 	var altars_complete: bool = rituals_completed >= total_rituals_required
 	var pumpkin_requirement: int = _pumpkin_requirement_for_current_level()
 	var pumpkins_complete: bool = current_level_number < 3 or pumpkins_collected >= pumpkin_requirement
@@ -2186,6 +1474,7 @@ func escape_cemetery() -> void:
 	if _has_escaped or not can_escape_cemetery():
 		return
 	_has_escaped = true
+	_log("level_completed", {"seconds_left": int(get_node("/root/LevelManager").get("seconds_left"))})
 	_level_score_seconds = int(get_node("/root/LevelManager").get("seconds_left"))
 	_level_score_points = _level_score_seconds
 	get_node("/root/GameManager").add_level_score(_level_score_points)
@@ -2221,6 +1510,10 @@ func _show_level_complete_screen() -> void:
 
 
 func _show_final_victory_screen() -> void:
+	_log("campaign_completed")
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.call("end_session", "victory")
 	_is_new_high_score = bool(get_node("/root/GameManager").call("check_and_update_high_score"))
 	_show_escape_screen(
 		"¡EL RITUAL ABSOLUTO SE HA CUMPLIDO!",
@@ -2232,148 +1525,30 @@ func _show_final_victory_screen() -> void:
 func _show_escape_screen(title_text: String, description_text: String, show_continue: bool) -> void:
 	if _victory_screen_layer != null:
 		return
-	_victory_screen_layer = CanvasLayer.new()
-	_victory_screen_layer.name = "EscapeTransitionLayer"
-	_victory_screen_layer.layer = 30
-	_victory_screen_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	_victory_screen_layer = (level_complete_scene if show_continue else victory_scene).instantiate() as CanvasLayer
 	add_child(_victory_screen_layer)
+	var layout := _victory_screen_layer.get_node("EscapeTransitionScreen/EscapePanel/Content")
+	layout.get_node("EscapeTitle").text = title_text
+	layout.get_node("EscapeDescription").text = description_text
 	if show_continue:
 		_add_transition_skip_input(_victory_screen_layer)
-
-	var full_screen := Control.new()
-	full_screen.name = "EscapeTransitionScreen"
-	full_screen.set_anchors_preset(Control.PRESET_FULL_RECT)
-	full_screen.mouse_filter = Control.MOUSE_FILTER_STOP
-	_victory_screen_layer.add_child(full_screen)
-
-	var backdrop := ColorRect.new()
-	backdrop.name = "EscapeBackdrop"
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	backdrop.color = Color(0.015, 0.01, 0.025, 0.9)
-	backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
-	full_screen.add_child(backdrop)
-	if show_continue:
-		var skip_hint := Label.new()
-		skip_hint.name = "SkipHint"
-		skip_hint.text = "Presiona ENTER para saltar"
-		skip_hint.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-		skip_hint.offset_left = -360.0
-		skip_hint.offset_top = -48.0
-		skip_hint.offset_right = -28.0
-		skip_hint.offset_bottom = -16.0
-		skip_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		skip_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		skip_hint.add_theme_color_override("font_color", Color("#CCCCCC"))
-		skip_hint.add_theme_font_size_override("font_size", 14)
-		skip_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		full_screen.add_child(skip_hint)
-
-	var panel := PanelContainer.new()
-	panel.name = "EscapePanel"
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -360.0
-	panel.offset_top = -235.0
-	panel.offset_right = 360.0
-	panel.offset_bottom = 235.0
-	var panel_style := StyleBoxFlat.new()
-	panel_style.bg_color = Color(0.035, 0.025, 0.055, 0.97)
-	panel_style.border_color = Color(0.55, 0.28, 0.2, 0.95)
-	panel_style.set_border_width_all(2)
-	panel_style.set_corner_radius_all(10)
-	panel_style.content_margin_left = 28.0
-	panel_style.content_margin_right = 28.0
-	panel_style.content_margin_top = 24.0
-	panel_style.content_margin_bottom = 24.0
-	panel.add_theme_stylebox_override("panel", panel_style)
-	full_screen.add_child(panel)
-
-	var layout := VBoxContainer.new()
-	layout.alignment = BoxContainer.ALIGNMENT_CENTER
-	layout.add_theme_constant_override("separation", 16)
-	panel.add_child(layout)
-
-	var title := Label.new()
-	title.name = "EscapeTitle"
-	title.text = title_text
-	title.custom_minimum_size.y = 70.0
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var title_settings := LabelSettings.new()
-	title_settings.font_size = 30 if show_continue else 32
-	title_settings.font_color = Color(0.92, 0.75, 0.52) if show_continue else Color(0.55, 1.0, 0.65)
-	title_settings.outline_color = Color(0.02, 0.01, 0.025, 1.0)
-	title_settings.outline_size = 8
-	title_settings.shadow_color = Color(0.75, 0.3, 0.12, 0.55) if show_continue else Color(0.1, 0.8, 0.25, 0.65)
-	title_settings.shadow_size = 10
-	title_settings.shadow_offset = Vector2(0.0, 0.0)
-	title.label_settings = title_settings
-	layout.add_child(title)
-
-	var description := Label.new()
-	description.name = "EscapeDescription"
-	description.text = description_text
-	description.custom_minimum_size.y = 36.0
-	description.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	description.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	description.add_theme_font_size_override("font_size", 18)
-	description.add_theme_color_override("font_color", Color(0.78, 0.76, 0.82))
-	layout.add_child(description)
-
-	if show_continue:
-		_add_escape_summary_line(layout, "Tiempo restante: %d seg" % _level_score_seconds)
-		_add_escape_summary_line(layout, "Puntos ganados: +%d" % _level_score_points)
-		_add_escape_summary_line(layout, "Puntuación Total: %d" % get_node("/root/GameManager").get("total_score"), true)
+		layout.get_node("Summary1").text = "Tiempo restante: %d seg" % _level_score_seconds
+		layout.get_node("Summary2").text = "Puntos ganados: +%d" % _level_score_points
+		layout.get_node("Summary3").text = "Puntuación Total: %d" % get_node("/root/GameManager").get("total_score")
+		layout.get_node("ContinueButton").text = "CONTINUAR AL NIVEL %d" % (current_level_number + 1)
+		layout.get_node("ContinueButton").pressed.connect(_play_menu_click)
+		layout.get_node("ContinueButton").pressed.connect(_continue_to_next_level)
 	else:
-		var game_manager: Node = get_node("/root/GameManager")
+		var game_manager := get_node("/root/GameManager")
 		var deaths: int = int(game_manager.get("penalties_count"))
-		var death_label: String = "muerte total" if deaths == 1 else "muertes totales"
-		var penalty_points: int = int(game_manager.call("get_total_penalty_points"))
-		_add_escape_summary_line(layout, "%d %s: -%d puntos" % [deaths, death_label, penalty_points])
-		_add_escape_summary_line(layout, "Puntos ganados: +%d" % _level_score_points)
-		_add_escape_summary_line(layout, "PUNTUACIÓN TOTAL: %d pts" % game_manager.get("total_score"), true)
-		if _is_new_high_score:
-			_add_escape_summary_line(layout, "¡NUEVA MEJOR PUNTUACIÓN!", true)
-	if show_continue:
-		var continue_button := _make_escape_button("CONTINUAR AL NIVEL %d" % (current_level_number + 1), true)
-		continue_button.pressed.connect(_continue_to_next_level)
-		layout.add_child(continue_button)
-	var menu_text := "MENÚ PRINCIPAL" if show_continue else "VOLVER AL MENÚ PRINCIPAL"
-	var menu_button := _make_escape_button(menu_text, not show_continue)
-	menu_button.pressed.connect(_return_to_main_menu)
-	layout.add_child(menu_button)
+		layout.get_node("Summary1").text = "%d %s: -%d puntos" % [deaths, "muerte total" if deaths == 1 else "muertes totales", int(game_manager.call("get_total_penalty_points"))]
+		layout.get_node("Summary2").text = "Puntos ganados: +%d" % _level_score_points
+		layout.get_node("Summary3").text = "PUNTUACIÓN TOTAL: %d pts" % game_manager.get("total_score")
+		layout.get_node("HighScoreNotice").visible = _is_new_high_score
+	layout.get_node("MenuButton").pressed.connect(_play_menu_click)
+	layout.get_node("MenuButton").pressed.connect(_return_to_main_menu)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = true
-
-
-func _add_escape_summary_line(layout: VBoxContainer, line_text: String, emphasized: bool = false) -> void:
-	var line := Label.new()
-	line.text = line_text
-	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line.add_theme_font_size_override("font_size", 18 if emphasized else 16)
-	line.add_theme_color_override("font_color", Color(0.96, 0.72, 0.42) if emphasized else Color(0.82, 0.8, 0.86))
-	layout.add_child(line)
-
-
-func _make_escape_button(button_text: String, highlighted: bool) -> Button:
-	var button := Button.new()
-	button.text = button_text
-	button.custom_minimum_size = Vector2(360.0, 52.0)
-	button.pressed.connect(_play_menu_click)
-	button.add_theme_font_size_override("font_size", 17)
-	button.add_theme_color_override("font_color", Color(0.98, 0.92, 0.82))
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color(0.32, 0.13, 0.09) if highlighted else Color(0.12, 0.1, 0.16)
-	normal.border_color = Color(0.82, 0.42, 0.22) if highlighted else Color(0.38, 0.32, 0.45)
-	normal.set_border_width_all(1)
-	normal.set_corner_radius_all(5)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color(0.48, 0.19, 0.11) if highlighted else Color(0.2, 0.16, 0.26)
-	hover.border_color = Color(1.0, 0.68, 0.38)
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	return button
 
 
 func _play_menu_click() -> void:
@@ -2389,6 +1564,9 @@ func _continue_to_next_level() -> void:
 
 
 func _return_to_main_menu() -> void:
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.call("end_session", "returned_to_menu")
 	get_tree().paused = false
 	get_node("/root/GameManager").call("reset_run")
 	get_tree().change_scene_to_file("res://scenes/MainMenu.tscn")
@@ -2403,6 +1581,7 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 		if target == null or not is_on_floor():
 			return
 		_has_pre_hiding_transform = true
+		_exiting_cover.clear()
 		is_hiding = true
 		var player_collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
 		if player_collision != null:
@@ -2432,13 +1611,19 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 			_has_pre_hiding_transform = false
 			_update_crouch_state(is_crouching)
 		else:
+			_log("hide_started", _hiding_state_payload())
+			if hiding_animation != null:
+				hiding_animation.play("hide_enter", 0.08)
 			play_sound_effect(SFX_HIDE)
 	else:
 		if not is_hiding:
 			return
+		_exiting_cover = {"cover": str(_hiding_target.name) if is_instance_valid(_hiding_target) else "", "cover_type": current_cover_type}
+		if hiding_animation != null:
+			hiding_animation.play("hide_exit", 0.1)
 		_cancel_cover_transition()
 		is_hiding = false
-		if _hiding_overlay_layer != null:
+		if hiding_animation == null and _hiding_overlay_layer != null:
 			_hiding_overlay_layer.visible = false
 		if breath_label != null:
 			breath_label.visible = false
@@ -2452,6 +1637,12 @@ func _set_hiding(hiding: bool, target: Node3D = null, restore_position: bool = f
 			_update_crouch_state(is_crouching)
 			_tween_hiding_camera(false)
 			_has_pre_hiding_transform = false
+		var ended_state := _hiding_state_payload()
+		ended_state.merge(_exiting_cover, true)
+		ended_state["breath_remaining"] = _breath_time_remaining
+		_log("hide_ended", ended_state)
+		if not _cover_transition_active:
+			_exiting_cover.clear()
 	_set_carried_relic_visible(not is_hidden)
 	if _interaction_prompt != null:
 		_update_interaction_prompt()
@@ -2469,20 +1660,10 @@ func _tween_hiding_camera(entering: bool, duration: float = 0.2) -> void:
 		return
 	if _hiding_camera_tween != null and _hiding_camera_tween.is_running():
 		_hiding_camera_tween.kill()
-	var target_position := _camera_base_position
-	if entering:
-		target_position.y = _camera_base_position.y * hiding_camera_height_ratio - 0.08
-		target_position.z += 0.12
-	elif is_crouching:
-		target_position.y *= 0.5
-	var target_rotation := Vector3(_pitch, 0.0, 0.0)
-	if entering:
-		target_rotation.x = clampf(_pitch + deg_to_rad(2.0), deg_to_rad(-85.0), deg_to_rad(85.0))
+	# Tween a stance weight, never the camera itself. A change of direction starts
+	# at its current weight, so exiting midway through entry cannot snap the view.
 	_hiding_camera_tween = create_tween()
-	_hiding_camera_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
-	_hiding_camera_tween.set_parallel(true)
-	_hiding_camera_tween.tween_property(camera, "position", target_position, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_hiding_camera_tween.tween_property(camera, "rotation", target_rotation, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_hiding_camera_tween.tween_property(self, "_hiding_camera_weight", 1.0 if entering else 0.0, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 
 
 func _is_any_enemy_chasing() -> bool:
@@ -2641,6 +1822,11 @@ func _finish_cover_transition() -> void:
 		_set_carried_relic_visible(not is_hidden)
 		if breath_label != null:
 			breath_label.visible = false
+		if not _exiting_cover.is_empty():
+			var exit_state := _hiding_state_payload()
+			exit_state.merge(_exiting_cover, true)
+			_log("hide_exit_completed", exit_state)
+			_exiting_cover.clear()
 	_update_crouch_state(Input.is_action_pressed("crouch"))
 	if _interaction_prompt != null:
 		_update_interaction_prompt()
@@ -2648,12 +1834,26 @@ func _finish_cover_transition() -> void:
 
 func collect_item(item_name: String) -> void:
 	items_collected += 1
+	_log("item_collected", {"item": item_name, "collected": items_collected})
 	item_collected.emit(item_name, items_collected, total_items_needed)
 
 
+func _hiding_state_payload() -> Dictionary:
+	return {
+		"hidden": is_hidden,
+		"hiding": is_hiding,
+		"hidden_by_zone": _hidden_by_zone,
+		"cover": str(_hiding_target.name) if is_instance_valid(_hiding_target) else "",
+		"cover_type": current_cover_type,
+	}
+
+
 func set_hidden(hidden: bool) -> void:
+	var changed := _hidden_by_zone != hidden
 	_hidden_by_zone = hidden
 	is_hidden = _hidden_by_zone or is_hiding
+	if changed:
+		_log("hiding_zone_entered" if hidden else "hiding_zone_left", _hiding_state_payload())
 	_set_carried_relic_visible(not is_hidden)
 
 
@@ -2666,7 +1866,8 @@ func orient_toward(world_target: Vector3) -> void:
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
 	if camera != null:
-		camera.rotation = Vector3.ZERO
+		_camera_base_rotation = Vector3.ZERO
+		_apply_camera_pose()
 
 
 func freeze_controls() -> void:
@@ -2682,21 +1883,17 @@ func freeze_controls() -> void:
 
 
 func _configure_collision_shape() -> void:
-	collision_layer = collision_layer | 1
-	collision_mask = collision_mask | 1
+	# The authored shape supplies the standing dimensions used by crouching.
 	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
-	if collision == null:
-		collision = CollisionShape3D.new()
-		collision.name = "CollisionShape3D"
-		add_child(collision)
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = collision_radius
-	capsule.height = maxf(collision_height, collision_radius * 2.0)
-	collision.shape = capsule
-	collision.position.y = 0.0
+	if collision != null and collision.shape is CapsuleShape3D:
+		collision.shape = collision.shape.duplicate()
+		collision_radius = (collision.shape as CapsuleShape3D).radius
+		collision_height = (collision.shape as CapsuleShape3D).height
 
 
 func _update_crouch_state(wants_to_crouch: bool) -> void:
+	if is_crouching != wants_to_crouch:
+		_log("crouch_started" if wants_to_crouch else "crouch_ended")
 	is_crouching = wants_to_crouch
 	var should_lower_posture: bool = is_crouching or is_hiding
 	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
@@ -2707,13 +1904,7 @@ func _update_crouch_state(wants_to_crouch: bool) -> void:
 		var target_height := collision_height * (0.5 if should_lower_posture else 1.0)
 		capsule.height = maxf(target_height, target_radius * 2.0)
 		collision.position.y = -(collision_height - capsule.height) * 0.5 if should_lower_posture else 0.0
-	if camera != null and (_hiding_camera_tween == null or not _hiding_camera_tween.is_running()):
-		var camera_ratio: float = 1.0
-		if is_crouching:
-			camera_ratio = 0.5
-		if is_hiding:
-			camera_ratio = minf(camera_ratio, hiding_camera_height_ratio)
-		camera.position.y = _standing_camera_height * camera_ratio - (0.08 if is_hiding else 0.0)
+	_apply_camera_pose()
 
 
 func _ensure_input_actions() -> void:
@@ -2750,3 +1941,19 @@ func _remove_key_action(action_name: StringName, key: Key) -> void:
 	for existing_event in InputMap.action_get_events(action_name):
 		if existing_event is InputEventKey and (existing_event.physical_keycode == key or existing_event.keycode == key):
 			InputMap.action_erase_event(action_name, existing_event)
+
+func _bind_authored_nodes(node: Node) -> void:
+	if node.has_meta("player_ref"):
+		set(StringName(node.get_meta("player_ref")), node)
+	if node.has_meta("player_array_ref"):
+		var target_array: Array = get(StringName(node.get_meta("player_array_ref")))
+		if not target_array.has(node):
+			target_array.append(node)
+	for child in node.get_children():
+		_bind_authored_nodes(child)
+
+
+func _log(kind: String, data: Dictionary = {}) -> void:
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.call("record", kind, data, global_position, current_level_number)

@@ -34,87 +34,17 @@ func _toggle_pause() -> void:
 
 
 func _build_interface() -> void:
-	_overlay = Control.new()
-	_overlay.name = "PauseOverlay"
-	_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
-	_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	add_child(_overlay)
-
-	var dimmer := ColorRect.new()
-	dimmer.name = "Dimmer"
-	dimmer.color = Color(0.035, 0.025, 0.055, 0.86)
-	dimmer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	dimmer.mouse_filter = Control.MOUSE_FILTER_STOP
-	dimmer.process_mode = Node.PROCESS_MODE_ALWAYS
-	_overlay.add_child(dimmer)
-
-	var layout := VBoxContainer.new()
-	layout.name = "PauseLayout"
-	layout.set_anchors_preset(Control.PRESET_CENTER)
-	layout.anchor_left = 0.5
-	layout.anchor_top = 0.5
-	layout.anchor_right = 0.5
-	layout.anchor_bottom = 0.5
-	layout.offset_left = -200.0
-	layout.offset_top = -190.0
-	layout.offset_right = 200.0
-	layout.offset_bottom = 190.0
-	layout.alignment = BoxContainer.ALIGNMENT_CENTER
-	layout.add_theme_constant_override("separation", 20)
-	layout.process_mode = Node.PROCESS_MODE_ALWAYS
-	_overlay.add_child(layout)
-
-	var title := Label.new()
-	title.text = "JUEGO EN PAUSA"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override("font_color", Color("f2d5a0"))
-	title.add_theme_font_size_override("font_size", 32)
-	layout.add_child(title)
-
-	var spacer := Control.new()
-	spacer.custom_minimum_size.y = 12.0
-	layout.add_child(spacer)
-
-	var resume_button := _make_button("REANUDAR")
-	resume_button.pressed.connect(_resume_game)
-	layout.add_child(resume_button)
-
-	var menu_button := _make_button("MENÚ PRINCIPAL")
-	menu_button.pressed.connect(_go_to_main_menu)
-	layout.add_child(menu_button)
-
-	var exit_button := _make_button("SALIR")
-	exit_button.pressed.connect(_quit_game)
-	layout.add_child(exit_button)
-
-
-func _make_button(label_text: String) -> Button:
-	var button := Button.new()
-	button.text = label_text
-	button.pressed.connect(_play_menu_click)
-	button.custom_minimum_size = Vector2(300.0, 52.0)
-	button.process_mode = Node.PROCESS_MODE_ALWAYS
-	button.focus_mode = Control.FOCUS_ALL
-	button.add_theme_font_size_override("font_size", 17)
-	button.add_theme_color_override("font_color", Color("fff0d4"))
-	button.add_theme_color_override("font_hover_color", Color("ffffff"))
-	var normal := StyleBoxFlat.new()
-	normal.bg_color = Color("30233b")
-	normal.border_color = Color("a65e38")
-	normal.set_border_width_all(1)
-	normal.set_corner_radius_all(4)
-	var hover := normal.duplicate() as StyleBoxFlat
-	hover.bg_color = Color("523044")
-	hover.border_color = Color("f0a34c")
-	button.add_theme_stylebox_override("normal", normal)
-	button.add_theme_stylebox_override("hover", hover)
-	button.add_theme_stylebox_override("pressed", hover)
-	return button
+	_overlay = $PauseOverlay
+	$PauseOverlay/PauseLayout/ResumeButton.pressed.connect(_play_menu_click)
+	$PauseOverlay/PauseLayout/ResumeButton.pressed.connect(_resume_game)
+	$PauseOverlay/PauseLayout/MenuButton.pressed.connect(_play_menu_click)
+	$PauseOverlay/PauseLayout/MenuButton.pressed.connect(_go_to_main_menu)
+	$PauseOverlay/PauseLayout/ExitButton.pressed.connect(_play_menu_click)
+	$PauseOverlay/PauseLayout/ExitButton.pressed.connect(_quit_game)
 
 
 func _play_menu_click() -> void:
-	var player := AudioStreamPlayer.new()
+	var player := preload("res://scenes/ui/SoundEffect.tscn").instantiate() as AudioStreamPlayer
 	player.stream = SFX_MENU_CLICK
 	player.process_mode = Node.PROCESS_MODE_ALWAYS
 	get_tree().root.add_child(player)
@@ -129,12 +59,14 @@ func _resume_game() -> void:
 
 
 func _go_to_main_menu() -> void:
+	_end_session("returned_to_menu")
 	get_tree().paused = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().change_scene_to_file(MAIN_MENU_SCENE)
 
 
 func _quit_game() -> void:
+	_end_session("quit")
 	get_tree().quit()
 
 
@@ -147,3 +79,8 @@ func _ensure_pause_action() -> void:
 		if existing_event is InputEventKey and existing_event.physical_keycode == KEY_P:
 			return
 	InputMap.action_add_event("pause_game", pause_key)
+
+func _end_session(outcome: String) -> void:
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.call("end_session", outcome)

@@ -6,6 +6,7 @@ signal ritual_activated(altar: RitualAltar, world_position: Vector3)
 const RITUAL_IGNITE_SFX: AudioStreamWAV = preload("res://audio/Efectos cortos/ritual_encender.wav")
 
 @export var is_lit: bool = false
+@export var lit_energy: float = 10.0
 
 var altar_light: OmniLight3D
 var ritual_audio_player: AudioStreamPlayer3D
@@ -50,21 +51,19 @@ func _configure_ritual_audio() -> void:
 		ritual_audio_player = AudioStreamPlayer3D.new()
 		ritual_audio_player.name = "RitualIgniteAudio"
 		add_child(ritual_audio_player)
-	ritual_audio_player.stream = RITUAL_IGNITE_SFX
-	ritual_audio_player.max_distance = 3.0
-	ritual_audio_player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
-	ritual_audio_player.volume_db = -8.0
-	ritual_audio_player.autoplay = false
+		ritual_audio_player.stream = RITUAL_IGNITE_SFX
+		ritual_audio_player.max_distance = 3.0
+		ritual_audio_player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
+		ritual_audio_player.volume_db = -8.0
+		ritual_audio_player.autoplay = false
 	ritual_audio_player.stop()
 
 
 func _sync_light_state() -> void:
 	if altar_light == null or not is_instance_valid(altar_light):
 		return
-	altar_light.light_color = Color(1.0, 0.55, 0.1)
-	altar_light.omni_range = 12.0
 	altar_light.shadow_enabled = is_lit
-	altar_light.light_energy = 10.0 if is_lit else 0.0
+	altar_light.light_energy = lit_energy if is_lit else 0.0
 
 
 func _on_body_entered(body: Node3D) -> void:

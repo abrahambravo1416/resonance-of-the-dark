@@ -86,6 +86,9 @@ func _expire_level_timer() -> void:
 	if not _timer_running:
 		return
 	_timer_running = false
+	var logger := get_node_or_null("/root/GameplayLog")
+	if logger != null:
+		logger.call("record", "time_expired", {"seconds_left": 0})
 	get_node("/root/GameManager").apply_penalty()
 	_update_timer_hud()
 	if _player != null and is_instance_valid(_player) and _player.has_method("freeze_controls"):
@@ -96,24 +99,8 @@ func _expire_level_timer() -> void:
 
 
 func _create_timer_hud() -> void:
-	_timer_hud_layer = CanvasLayer.new()
-	_timer_hud_layer.name = "TimeScoreHUD"
-	_timer_hud_layer.layer = 8
-	add_child(_timer_hud_layer)
-	var container := VBoxContainer.new()
-	container.name = "TimeScore"
-	container.position = Vector2(28.0, 102.0)
-	container.add_theme_constant_override("separation", 4)
-	_timer_hud_layer.add_child(container)
-	_timer_label = Label.new()
-	_timer_label.add_theme_font_size_override("font_size", 18)
-	_timer_label.add_theme_color_override("font_color", Color("f2d5a0"))
-	container.add_child(_timer_label)
-	var score_label := Label.new()
-	score_label.name = "Score"
-	score_label.add_theme_font_size_override("font_size", 16)
-	score_label.add_theme_color_override("font_color", Color("e2c7a5"))
-	container.add_child(score_label)
+	_timer_hud_layer = $TimeScoreHUD
+	_timer_label = $TimeScoreHUD/TimeScore/Timer
 	_update_timer_hud()
 
 
