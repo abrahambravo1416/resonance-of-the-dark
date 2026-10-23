@@ -1,51 +1,45 @@
-[gd_scene format=4]
+[gd_scene format=3 uid="uid://cj4jlwqno6q8s"]
 
-[ext_resource type="PackedScene" path="res://scenes/narrative/Narrative_01.tscn" id="narrative_layer"]
-
-[ext_resource type="Script" path="res://scripts/Player.gd" id="1_os0vb"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/arch.gltf" id="2_fg4f3"]
-[ext_resource type="Script" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
-[ext_resource type="Script" path="res://scripts/LevelBuilder.gd" id="3_builder"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/arch_gate.gltf" id="3_dtqmx"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence.gltf" id="4_3lvva"]
-[ext_resource type="Script" path="res://scripts/PauseMenu.gd" id="4_pause_menu"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_broken.gltf" id="5_c3ned"]
-[ext_resource type="Script" path="res://scripts/HealthHUD.gd" id="5_health_hud"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_gate.gltf" id="6_f3c84"]
-[ext_resource type="Script" path="res://scripts/GameOverMenu.gd" id="6_game_over"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_pillar.gltf" id="7_qnxge"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_pillar_broken.gltf" id="8_8mxud"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_seperate.gltf" id="9_sxmjx"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/fence_seperate_broken.gltf" id="10_4dftm"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/grave_A.gltf" id="11_ysvwd"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/grave_A_destroyed.gltf" id="12_fysk0"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/grave_B.gltf" id="13_6tul0"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pillar.gltf" id="14_3mipf"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/post.gltf" id="15_mkbk2"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/post_lantern.gltf" id="16_revls"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/post_skull.gltf" id="17_lo3pj"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_dead_large.gltf" id="18_j0per"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_dead_large_decorated.gltf" id="19_ha1la"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_dead_medium.gltf" id="20_hct06"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_dead_small.gltf" id="21_s07us"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_orange_large.gltf" id="22_i2cia"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_orange_medium.gltf" id="23_6c0g0"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_orange_small.gltf" id="24_2367b"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_yellow_large.gltf" id="25_506o8"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_yellow_medium.gltf" id="26_qvjio"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/tree_pine_yellow_small.gltf" id="27_q6qt0"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_orange.gltf" id="28_vd3lr"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_orange_jackolantern.gltf" id="29_vxlr0"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_orange_small.gltf" id="30_fje37"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_yellow.gltf" id="31_uj7qp"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_yellow_jackolantern.gltf" id="32_etuen"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/pumpkin_yellow_small.gltf" id="33_mqm1m"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/coffin.gltf" id="34_xiqjr"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/coffin_decorated.gltf" id="35_cukrd"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/crypt.gltf" id="36_owuwv"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/gravemarker_A.gltf" id="37_t0ast"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/gravemarker_B.gltf" id="38_s3iof"]
-[ext_resource type="PackedScene" path="res://assets/halloween/gltf/gravestone.gltf" id="39_ptcv2"]
+[ext_resource type="PackedScene" uid="uid://cy8vonnygbwdw" path="res://assets/halloween/gltf/arch.gltf" id="2_fg4f3"]
+[ext_resource type="Script" uid="uid://cap1gcn4yt3m6" path="res://scripts/EnemyAI.gd" id="2_tkx3x"]
+[ext_resource type="Script" uid="uid://56mdnjrdeemm" path="res://scripts/LevelBuilder.gd" id="3_builder"]
+[ext_resource type="PackedScene" uid="uid://dx5n5iu3w7ykh" path="res://assets/halloween/gltf/arch_gate.gltf" id="3_dtqmx"]
+[ext_resource type="PackedScene" uid="uid://c2pyakh5lmrnq" path="res://assets/halloween/gltf/fence.gltf" id="4_3lvva"]
+[ext_resource type="PackedScene" uid="uid://sd52v371dkc4" path="res://assets/halloween/gltf/fence_broken.gltf" id="5_c3ned"]
+[ext_resource type="PackedScene" uid="uid://cipfrqj3t2occ" path="res://assets/halloween/gltf/fence_gate.gltf" id="6_f3c84"]
+[ext_resource type="PackedScene" uid="uid://cvfn6l8uymd8d" path="res://assets/halloween/gltf/fence_pillar.gltf" id="7_qnxge"]
+[ext_resource type="PackedScene" uid="uid://ds2q4qc6gfs7p" path="res://assets/halloween/gltf/fence_pillar_broken.gltf" id="8_8mxud"]
+[ext_resource type="PackedScene" uid="uid://bfrcwpnuljwxo" path="res://assets/halloween/gltf/fence_seperate.gltf" id="9_sxmjx"]
+[ext_resource type="PackedScene" uid="uid://qrnc0cyqwmq7" path="res://assets/halloween/gltf/fence_seperate_broken.gltf" id="10_4dftm"]
+[ext_resource type="PackedScene" uid="uid://ch534t0b1snjk" path="res://assets/halloween/gltf/grave_A.gltf" id="11_ysvwd"]
+[ext_resource type="PackedScene" uid="uid://3k6t0oebsp5o" path="res://assets/halloween/gltf/grave_A_destroyed.gltf" id="12_fysk0"]
+[ext_resource type="PackedScene" uid="uid://bbdc34vo0dup8" path="res://assets/halloween/gltf/grave_B.gltf" id="13_6tul0"]
+[ext_resource type="PackedScene" uid="uid://d35cl05wbqhfk" path="res://assets/halloween/gltf/pillar.gltf" id="14_3mipf"]
+[ext_resource type="PackedScene" uid="uid://1jjgy0pvo41t" path="res://assets/halloween/gltf/post.gltf" id="15_mkbk2"]
+[ext_resource type="PackedScene" uid="uid://cw53r1pgo7qf6" path="res://assets/halloween/gltf/post_lantern.gltf" id="16_revls"]
+[ext_resource type="PackedScene" uid="uid://dlhtgqhx7brfq" path="res://assets/halloween/gltf/post_skull.gltf" id="17_lo3pj"]
+[ext_resource type="PackedScene" uid="uid://batjqhguj0uwe" path="res://assets/halloween/gltf/tree_dead_large.gltf" id="18_j0per"]
+[ext_resource type="PackedScene" uid="uid://db8f3xlouckc1" path="res://assets/halloween/gltf/tree_dead_large_decorated.gltf" id="19_ha1la"]
+[ext_resource type="PackedScene" uid="uid://b2ubbnuq6qcod" path="res://assets/halloween/gltf/tree_dead_medium.gltf" id="20_hct06"]
+[ext_resource type="PackedScene" uid="uid://bejaaf2opqboh" path="res://assets/halloween/gltf/tree_dead_small.gltf" id="21_s07us"]
+[ext_resource type="PackedScene" uid="uid://ddyys572uam6q" path="res://assets/halloween/gltf/tree_pine_orange_large.gltf" id="22_i2cia"]
+[ext_resource type="PackedScene" uid="uid://ccdt1nyp5kqcd" path="res://assets/halloween/gltf/tree_pine_orange_medium.gltf" id="23_6c0g0"]
+[ext_resource type="PackedScene" uid="uid://dfx4w7u1bdvid" path="res://assets/halloween/gltf/tree_pine_orange_small.gltf" id="24_2367b"]
+[ext_resource type="PackedScene" uid="uid://dd30iljkwfrwl" path="res://assets/halloween/gltf/tree_pine_yellow_large.gltf" id="25_506o8"]
+[ext_resource type="PackedScene" uid="uid://m17s1qdo5sso" path="res://assets/halloween/gltf/tree_pine_yellow_medium.gltf" id="26_qvjio"]
+[ext_resource type="PackedScene" uid="uid://b46bjdumf0fdk" path="res://assets/halloween/gltf/tree_pine_yellow_small.gltf" id="27_q6qt0"]
+[ext_resource type="PackedScene" uid="uid://cbxef84uln3j2" path="res://assets/halloween/gltf/pumpkin_orange.gltf" id="28_vd3lr"]
+[ext_resource type="PackedScene" uid="uid://dl2k7ldh3tf7d" path="res://assets/halloween/gltf/pumpkin_orange_jackolantern.gltf" id="29_vxlr0"]
+[ext_resource type="PackedScene" uid="uid://da5i0e1k61b0t" path="res://assets/halloween/gltf/pumpkin_orange_small.gltf" id="30_fje37"]
+[ext_resource type="PackedScene" uid="uid://bw1adc4ysn1ak" path="res://assets/halloween/gltf/pumpkin_yellow.gltf" id="31_uj7qp"]
+[ext_resource type="PackedScene" uid="uid://cve7y06k6n1p8" path="res://assets/halloween/gltf/pumpkin_yellow_jackolantern.gltf" id="32_etuen"]
+[ext_resource type="PackedScene" uid="uid://gl2yqiio8tq4" path="res://assets/halloween/gltf/pumpkin_yellow_small.gltf" id="33_mqm1m"]
+[ext_resource type="PackedScene" uid="uid://b45j7opmgev7q" path="res://assets/halloween/gltf/coffin.gltf" id="34_xiqjr"]
+[ext_resource type="PackedScene" uid="uid://25nfrkg6awds" path="res://assets/halloween/gltf/coffin_decorated.gltf" id="35_cukrd"]
+[ext_resource type="PackedScene" uid="uid://cmklsx1uxrmeu" path="res://assets/halloween/gltf/crypt.gltf" id="36_owuwv"]
+[ext_resource type="PackedScene" uid="uid://cxhyu1ftvvnb4" path="res://assets/halloween/gltf/gravemarker_A.gltf" id="37_t0ast"]
+[ext_resource type="PackedScene" uid="uid://o8r41c1wimrs" path="res://assets/halloween/gltf/gravemarker_B.gltf" id="38_s3iof"]
+[ext_resource type="PackedScene" uid="uid://dgvgooyv0fjm7" path="res://assets/halloween/gltf/gravestone.gltf" id="39_ptcv2"]
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0000.res" id="42_qga51"]
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0001.res" id="43_ghq16"]
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0002.res" id="44_y7m01"]
@@ -114,114 +108,17 @@
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0065.res" id="107_oe55i"]
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0066.res" id="108_a34ag"]
 [ext_resource type="ArrayMesh" path="res://resources/authored_meshes/mesh_0067.res" id="109_evk86"]
-[ext_resource type="Script" path="res://scripts/HidingZone.gd" id="110_dexa8"]
-[ext_resource type="Script" path="res://scripts/InteractableItem.gd" id="111_qbg7e"]
-[ext_resource type="AudioStream" path="res://audio/musica_de_nivel1y2.ogg" id="115_y740i"]
-[ext_resource type="AudioStream" path="res://audio/musica_persecucion.ogg" id="116_1im83"]
-[ext_resource type="Script" path="res://scripts/RitualAltar.gd" id="117_ni8of"]
-[ext_resource type="AudioStream" path="res://audio/Efectos cortos/ritual_encender.wav" id="118_33n10"]
-
-[ext_resource type="PackedScene" path="res://scenes/actors/Player.tscn" id="editable_Player"]
-[ext_resource type="PackedScene" path="res://scenes/ui/PauseMenu.tscn" id="editable_PauseMenu"]
+[ext_resource type="Script" uid="uid://8jq4kdlj8lf" path="res://scripts/HidingZone.gd" id="110_dexa8"]
+[ext_resource type="Script" uid="uid://cs6u2lnnura7y" path="res://scripts/InteractableItem.gd" id="111_qbg7e"]
+[ext_resource type="AudioStream" uid="uid://brw7x4ksawq7r" path="res://audio/musica_de_nivel1y2.ogg" id="115_y740i"]
+[ext_resource type="AudioStream" uid="uid://blmb7qlpkl0ax" path="res://audio/musica_persecucion.ogg" id="116_1im83"]
+[ext_resource type="Script" uid="uid://j1wumcrcml7o" path="res://scripts/RitualAltar.gd" id="117_ni8of"]
+[ext_resource type="AudioStream" uid="uid://gpovubrahm6q" path="res://audio/Efectos cortos/ritual_encender.wav" id="118_33n10"]
 [ext_resource type="PackedScene" path="res://scenes/ui/GameOverMenu.tscn" id="editable_GameOverMenu"]
 [ext_resource type="PackedScene" path="res://scenes/ui/HealthHUD.tscn" id="editable_HealthHUD"]
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_gfwgd"]
-radius = 0.3
-height = 1.7
-
-[sub_resource type="SystemFont" id="SystemFont_ce03l"]
-font_names = PackedStringArray("Arial", "DejaVu Sans", "sans-serif")
-font_weight = 700
-
-[sub_resource type="LabelSettings" id="LabelSettings_kpdd8"]
-font = SubResource("SystemFont_ce03l")
-font_size = 14
-font_color = Color(0.2, 0.9, 0.4, 1)
-outline_size = 8
-outline_color = Color(0, 0, 0, 1)
-shadow_size = 5
-shadow_color = Color(0.2, 0.9, 0.4, 0.6)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qktnc"]
-bg_color = Color(0.05, 0.05, 0.08, 0.6)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.3, 0.8, 1, 0.4)
-corner_radius_top_left = 58
-corner_radius_top_right = 58
-corner_radius_bottom_right = 58
-corner_radius_bottom_left = 58
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yjrel"]
-bg_color = Color(0, 0, 0, 0)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.3, 0.8, 1, 0.16)
-corner_radius_top_left = 36
-corner_radius_top_right = 36
-corner_radius_bottom_right = 36
-corner_radius_bottom_left = 36
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_y0ioh"]
-bg_color = Color(0.8, 0.95, 1, 0.24)
-corner_radius_top_left = 7
-corner_radius_top_right = 7
-corner_radius_bottom_right = 7
-corner_radius_bottom_left = 7
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cq83c"]
-bg_color = Color(0.92, 0.98, 1, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="LabelSettings" id="LabelSettings_ffe3a"]
-font_size = 13
-font_color = Color(0.7, 0.9, 1, 1)
-outline_size = 2
-outline_color = Color(0.01, 0.025, 0.04, 0.9)
-shadow_size = 3
-shadow_color = Color(0.3, 0.8, 1, 0.24)
-shadow_offset = Vector2(0, 1)
-
-[sub_resource type="SystemFont" id="SystemFont_u806k"]
-font_names = PackedStringArray("Arial")
-font_weight = 700
-
-[sub_resource type="SystemFont" id="SystemFont_fp2on"]
-font_names = PackedStringArray("Georgia")
-font_weight = 500
-
-[sub_resource type="LabelSettings" id="LabelSettings_qe248"]
-font = SubResource("SystemFont_u806k")
-font_size = 18
-font_color = Color(1, 0.78, 0.42, 0.98)
-outline_size = 5
-outline_color = Color(0.02, 0.015, 0.025, 0.95)
-shadow_size = 4
-shadow_color = Color(0, 0, 0, 0.8)
-shadow_offset = Vector2(1, 2)
-
-[sub_resource type="LabelSettings" id="LabelSettings_a3yjx"]
-font_size = 17
-font_color = Color(0.85, 0.95, 1, 0.95)
-outline_size = 4
-outline_color = Color(0.01, 0.02, 0.03, 0.95)
-shadow_size = 4
-shadow_color = Color(0, 0, 0, 0.8)
-shadow_offset = Vector2(1, 2)
-
-[sub_resource type="AudioStreamWAV" id="AudioStreamWAV_sonwe"]
-data = PackedByteArray("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")
-format = 3
-loop_mode = 1
-stereo = true
+[ext_resource type="PackedScene" path="res://scenes/ui/PauseMenu.tscn" id="editable_PauseMenu"]
+[ext_resource type="PackedScene" path="res://scenes/actors/Player.tscn" id="editable_Player"]
+[ext_resource type="PackedScene" path="res://scenes/narrative/Narrative_01.tscn" id="narrative_layer"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_8axgy"]
 radius = 0.48
@@ -1062,214 +959,6 @@ radius = 0.55
 [sub_resource type="SphereShape3D" id="SphereShape3D_6iscn"]
 radius = 0.55
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6sq2q"]
-bg_color = Color(0.1882353, 0.13725491, 0.23137255, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6509804, 0.36862746, 0.21960784, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u4qi8"]
-bg_color = Color(0.32156864, 0.1882353, 0.26666668, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1vkhv"]
-bg_color = Color(0.1882353, 0.13725491, 0.23137255, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6509804, 0.36862746, 0.21960784, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hwnlo"]
-bg_color = Color(0.32156864, 0.1882353, 0.26666668, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qkbwc"]
-bg_color = Color(0.1882353, 0.13725491, 0.23137255, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6509804, 0.36862746, 0.21960784, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_3rbvb"]
-bg_color = Color(0.32156864, 0.1882353, 0.26666668, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.6392157, 0.29803923, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ypked"]
-content_margin_left = 3.0
-content_margin_top = 3.0
-content_margin_right = 3.0
-content_margin_bottom = 3.0
-bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mmtat"]
-content_margin_left = 3.0
-content_margin_top = 3.0
-content_margin_right = 3.0
-content_margin_bottom = 3.0
-bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t6xr7"]
-content_margin_left = 3.0
-content_margin_top = 3.0
-content_margin_right = 3.0
-content_margin_bottom = 3.0
-bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_12d3t"]
-content_margin_left = 3.0
-content_margin_top = 3.0
-content_margin_right = 3.0
-content_margin_bottom = 3.0
-bg_color = Color(0.07058824, 0.05882353, 0.09411765, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.4392157, 0.3764706, 0.44313726, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-corner_radius_bottom_right = 3
-corner_radius_bottom_left = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_edlwy"]
-bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_r3fqu"]
-bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0dtn"]
-bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g0t8r"]
-bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_k8sul"]
-bg_color = Color(0.20784314, 0.101960786, 0.14509805, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.6627451, 0.29411766, 0.2784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_autax"]
-bg_color = Color(0.32941177, 0.13725491, 0.1764706, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9411765, 0.4745098, 0.40784314, 1)
-corner_radius_top_left = 4
-corner_radius_top_right = 4
-corner_radius_bottom_right = 4
-corner_radius_bottom_left = 4
-
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1e8ya"]
 sky_top_color = Color(0.025, 0.035, 0.09, 1)
 sky_horizon_color = Color(0.25, 0.16, 0.2, 1)
@@ -1321,8 +1010,19 @@ hiding_scenes = Array[PackedScene]([ExtResource("34_xiqjr"), ExtResource("35_cuk
 metadata/authored_layout = true
 metadata/source_seed = 1401
 
-[node name="Player" parent="." instance=ExtResource("editable_Player")]
+[node name="Player" parent="." unique_id=737289290 instance=ExtResource("editable_Player")]
 transform = Transform3D(-1, 0, 1.509958e-07, 0, 1, 0, -1.509958e-07, 0, -1, 21, 1, 18)
+
+[node name="ThreatRadarHUD" parent="Player/ThreatRadarLayer" parent_id_path=PackedInt32Array(737289290, 1469090439) index="0" unique_id=692245028]
+grow_vertical = 0
+
+[node name="OverlayRoot" parent="Player/HidingVisionOverlay" parent_id_path=PackedInt32Array(737289290, 370956184) index="0" unique_id=1359306782]
+modulate = Color(1, 1, 1, 0)
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AbsoluteRitualCarryAnchor" parent="Player" index="7"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.15, -0.9)
 
 [node name="Enemy1" type="CharacterBody3D" parent="." unique_id=963199558 node_paths=PackedStringArray("navigation_agent", "player", "patrol_points")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 39, 0, 6)
@@ -6071,11 +5771,23 @@ transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, 0, -0.5478011, 0)
 [node name="pumpkin_yellow" type="MeshInstance3D" parent="NavigationRegion3D/Items/Spellbook_04/pumpkin_yellow2" unique_id=2105564607]
 mesh = ExtResource("103_t73vu")
 
-[node name="PauseMenu" parent="." instance=ExtResource("editable_PauseMenu")]
+[node name="PauseMenu" parent="." unique_id=277027357 instance=ExtResource("editable_PauseMenu")]
 
-[node name="HealthHUD" parent="." instance=ExtResource("editable_HealthHUD")]
+[node name="PauseOverlay" parent="PauseMenu" index="0" unique_id=149407018]
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="GameOverMenu" parent="." instance=ExtResource("editable_GameOverMenu")]
+[node name="HealthHUD" parent="." unique_id=287735726 instance=ExtResource("editable_HealthHUD")]
+
+[node name="HealthHUD" parent="HealthHUD" index="0" unique_id=153271004]
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="GameOverMenu" parent="." unique_id=1606467162 instance=ExtResource("editable_GameOverMenu")]
+
+[node name="GameOverOverlay" parent="GameOverMenu" index="0" unique_id=1789412738]
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="LevelMusicPlayer" type="AudioStreamPlayer" parent="." unique_id=968211133]
 process_mode = 3
@@ -6316,14 +6028,86 @@ omni_range = 3.5
 [node name="Respawn_12_11" type="Marker3D" parent="HealthRespawnPoints" unique_id=839732827]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 36, 0, 33)
 
-[node name="Narrative" parent="." instance=ExtResource("narrative_layer")]
+[node name="Narrative" parent="." unique_id=935437811 instance=ExtResource("narrative_layer")]
+
+[node name="Custodian" parent="Narrative" index="1"]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 18.8, 0, 22)
+
+[node name="Visual" parent="Narrative/Custodian" index="0"]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, 0, 0, 0)
+
+[node name="IdleAnimation" parent="Narrative/Custodian" index="1"]
+autoplay = &"idle"
+
+[node name="LanternGlow" parent="Narrative/Custodian" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Name" parent="Narrative/Custodian" index="3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+
+[node name="Witness" parent="Narrative" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 0, 15)
+
+[node name="Visual" parent="Narrative/Witness" index="0"]
+transform = Transform3D(0.65, 0, 0, 0, 0.65, 0, 0, 0, 0.65, 0, 0, 0)
+
+[node name="IdleAnimation" parent="Narrative/Witness" index="1"]
+autoplay = &"idle"
+
+[node name="LanternGlow" parent="Narrative/Witness" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="Name" parent="Narrative/Witness" index="3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+
+[node name="FirstMemory" parent="Narrative" index="3"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 17, 0.12, 20)
+
+[node name="Visual" parent="Narrative/FirstMemory" index="0"]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 0, 0, 0)
+
+[node name="Glow" parent="Narrative/FirstMemory" index="1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+
+[node name="Name" parent="Narrative/FirstMemory" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+
+[node name="SecondMemory" parent="Narrative" index="4"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 0.12, 33)
+
+[node name="Visual" parent="Narrative/SecondMemory" index="0"]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 0, 0, 0)
+
+[node name="Glow" parent="Narrative/SecondMemory" index="1"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+
+[node name="Name" parent="Narrative/SecondMemory" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+
+[node name="PassingEcho" parent="Narrative" index="5"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 21, 1, 27)
+
+[node name="EchoLight" parent="Narrative/PassingEcho" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+
+[node name="WhisperEcho" parent="Narrative" index="6"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33, 1, 21)
+
+[node name="EchoLight" parent="Narrative/WhisperEcho" index="2"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 
 [editable path="Player"]
-
 [editable path="PauseMenu"]
-
 [editable path="HealthHUD"]
-
 [editable path="GameOverMenu"]
-
 [editable path="Narrative"]
+[editable path="Narrative/Custodian"]
+[editable path="Narrative/Custodian/Visual"]
+[editable path="Narrative/Witness"]
+[editable path="Narrative/Witness/Visual"]
+[editable path="Narrative/FirstMemory"]
+[editable path="Narrative/FirstMemory/Visual"]
+[editable path="Narrative/SecondMemory"]
+[editable path="Narrative/SecondMemory/Visual"]
+[editable path="Narrative/PassingEcho"]
+[editable path="Narrative/WhisperEcho"]

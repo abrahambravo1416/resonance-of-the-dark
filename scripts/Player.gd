@@ -50,6 +50,13 @@ const TRANSITION_SKIP_INPUT_SCRIPT: Script = preload("res://scripts/TransitionSk
 @export var walk_speed: float = 3.5
 @export var sprint_speed: float = 6.5
 @export var jump_velocity: float = 7.0
+@export var coyote_time: float = 0.15
+@export var jump_buffer_time: float = 0.15
+@export var shake_decay: float = 5.0
+@export var walk_step_frequency: float = 12.0
+@export var walk_step_amplitude: float = 0.05
+@export var run_step_frequency: float = 16.0
+@export var run_step_amplitude: float = 0.09
 @export var mouse_sensitivity: float = 0.002
 @export var gravity: float = 18.0
 @export var walk_noise_level: float = 0.25
@@ -112,6 +119,15 @@ var exit_unlocked: bool = false
 var controls_frozen: bool = false
 var is_dead: bool = false
 
+var coyote_timer: float = 0.0
+var jump_buffer_timer: float = 0.0
+var shake_strength: float = 0.0
+var rng = RandomNumberGenerator.new()
+var _screenshake_offset: Vector2 = Vector2.ZERO
+var step_cycle: float = 0.0
+@onready var initial_cam_y: float = $Camera3D.position.y
+var _head_bob_offset: Vector3 = Vector3.ZERO
+var _head_bob_roll: float = 0.0
 var _noise_timer: float = 0.0
 var _pitch: float = 0.0
 var _standing_camera_height: float = 0.55
@@ -195,6 +211,7 @@ var countdown_time: int = 10
 
 
 func _ready() -> void:
+	rng.randomize()
 	add_to_group("player")
 	max_health = maxi(1, max_health)
 	current_health = clampi(current_health, 0, max_health)
@@ -207,7 +224,7 @@ func _ready() -> void:
 	if camera == null:
 		camera = get_node_or_null("Camera3D") as Camera3D
 	if camera != null:
-		_standing_camera_height = camera.position.y
+		_standing_camera_height = initial_cam_y
 		_camera_base_position = camera.position
 		_camera_base_rotation = camera.rotation
 		_pitch = camera.rotation.x
@@ -228,6 +245,14 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if shake_strength > 0.0:
+		shake_strength = move_toward(shake_strength, 0.0, shake_decay * delta)
+		_screenshake_offset = Vector2(
+			rng.randf_range(-shake_strength, shake_strength),
+			rng.randf_range(-shake_strength, shake_strength)
+		) * 0.1
+	else:
+		_screenshake_offset = Vector2.ZERO
 	_apply_camera_pose()
 	_update_threat_radar(delta)
 	_update_interaction_prompt()
@@ -246,6 +271,26 @@ func _process(delta: float) -> void:
 		_log("health_restored", {"amount": 1, "health": current_health, "source": "passive_regeneration"})
 		health_changed.emit(current_health, max_health)
 		_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
+
+
+func add_screenshake(amount: float) -> void:
+	shake_strength = clamp(shake_strength + amount, 0.0, 1.0)
+
+
+func _update_head_bob(delta: float, moving_on_ground: bool) -> void:
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	if moving_on_ground and is_on_floor() and horizontal_speed > 0.2:
+		var current_frequency: float = run_step_frequency if is_running else walk_step_frequency
+		var current_amplitude: float = run_step_amplitude if is_running else walk_step_amplitude
+		step_cycle += delta * current_frequency
+		_head_bob_offset.y = sin(step_cycle) * current_amplitude
+		_head_bob_offset.x = cos(step_cycle * 0.5) * (current_amplitude * 0.5)
+		_head_bob_roll = cos(step_cycle * 0.5) * deg_to_rad(1.2)
+	else:
+		step_cycle = 0.0
+		var return_weight := clampf(delta * 10.0, 0.0, 1.0)
+		_head_bob_offset = _head_bob_offset.lerp(Vector3.ZERO, return_weight)
+		_head_bob_roll = lerpf(_head_bob_roll, 0.0, return_weight)
 
 
 func set_enemies(enemy_list: Array[CharacterBody3D]) -> void:
@@ -738,6 +783,7 @@ func take_damage(amount: int = 1) -> void:
 	current_health = maxi(0, current_health - amount)
 	if current_health == previous_health:
 		return
+	add_screenshake(0.4)
 	_regeneration_timer = regeneration_delay
 	_log("damage_taken", {"amount": previous_health - current_health, "health": current_health})
 	health_changed.emit(current_health, max_health)
@@ -824,8 +870,9 @@ func _apply_camera_pose() -> void:
 	var visual_position := hiding_motion.position if hiding_motion != null else Vector3.ZERO
 	var visual_rotation := hiding_motion.rotation if hiding_motion != null else Vector3.ZERO
 	var hit_offset := camera_shake.position if camera_shake != null else Vector3.ZERO
-	camera.position = _camera_rest_position() + visual_position + hit_offset
-	camera.rotation = Vector3(_pitch, _camera_base_rotation.y, _camera_base_rotation.z) + visual_rotation
+	var screenshake_offset := Vector3(_screenshake_offset.x, _screenshake_offset.y, 0.0)
+	camera.position = _camera_rest_position() + visual_position + hit_offset + screenshake_offset + _head_bob_offset
+	camera.rotation = Vector3(_pitch, _camera_base_rotation.y, _camera_base_rotation.z + _head_bob_roll) + visual_rotation
 
 
 func _on_hiding_animation_finished(animation_name: StringName) -> void:
@@ -990,11 +1037,20 @@ func _hide_pumpkin_lock_message() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if Input.is_action_just_pressed("jump") or Input.is_action_just_pressed("ui_accept"):
+		jump_buffer_timer = jump_buffer_time
+	jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
+	if is_on_floor():
+		coyote_timer = coyote_time
+	else:
+		coyote_timer = maxf(0.0, coyote_timer - delta)
 	if controls_frozen:
+		_update_head_bob(delta, false)
 		_update_footstep_audio(false)
 		velocity = Vector3.ZERO
 		return
 	if _cover_transition_active:
+		_update_head_bob(delta, false)
 		_update_footstep_audio(false)
 		velocity = Vector3.ZERO
 		return
@@ -1011,6 +1067,7 @@ func _physics_process(delta: float) -> void:
 			velocity = Vector3.ZERO
 			return
 		velocity = Vector3.ZERO
+		_update_head_bob(delta, false)
 		_update_footstep_audio(false)
 		_update_noise(delta, false)
 		return
@@ -1046,18 +1103,25 @@ func _physics_process(delta: float) -> void:
 		_knockback_velocity.z = move_toward(_knockback_velocity.z, 0.0, knockback_decay * delta)
 		_knockback_time_remaining = maxf(0.0, _knockback_time_remaining - delta)
 
-	if is_on_floor():
-		var can_jump_while_carrying: bool = is_carrying_absolute_ritual_relic
-		var jump_pressed: bool = Input.is_action_just_pressed("jump")
-		if jump_pressed and not is_hiding and (not is_crouching or can_jump_while_carrying):
-			velocity.y = jump_velocity
-			_log("jumped")
-		else:
-			velocity.y = 0.0
+	var can_jump_while_carrying: bool = is_carrying_absolute_ritual_relic
+	if jump_buffer_timer > 0.0 and coyote_timer > 0.0 and not is_hiding and (not is_crouching or can_jump_while_carrying):
+		velocity.y = jump_velocity
+		coyote_timer = 0.0
+		jump_buffer_timer = 0.0
+		_log("jumped")
+	elif is_on_floor():
+		velocity.y = 0.0
 	else:
 		velocity.y -= gravity * delta
+	var was_on_floor: bool = is_on_floor()
 	move_and_slide()
+	_update_head_bob(delta, true)
+	var landed: bool = not was_on_floor and is_on_floor()
+	if landed:
+		add_screenshake(0.15)
 	var horizontal_motion: bool = absf(velocity.x) > 0.01 or absf(velocity.z) > 0.01
+	if is_on_floor() and horizontal_motion:
+		add_screenshake(0.03 if is_running else 0.01)
 	_update_footstep_audio(is_on_floor() and horizontal_motion and is_running)
 	_update_noise(delta, input_vector.length_squared() > 0.0)
 

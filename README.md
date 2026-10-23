@@ -94,3 +94,31 @@ node --test telemetry/test_replay.js
 ```
 
 En macOS, si `godot` no está en el PATH, utiliza `/Applications/Godot.app/Contents/MacOS/Godot`. `RESONANCE_CAPTURE=1` desactiva los registros durante las pruebas visuales; no debe usarse al jugar si quieres guardar la partida. Las pruebas de SQLite usan directorios temporales y no alteran las partidas reales.
+
+## 🕹️ Mecánicas de Game Feel y Juice
+
+Para mejorar la responsividad, la fluidez y la retroalimentación visual del jugador, se implementaron cuatro elementos clave de *Game Feel*:
+
+### 1. Input Buffering (Salto)
+Permite almacenar temporalmente la orden de salto antes de tocar el suelo para ejecutarla inmediatamente al aterrizar.
+* **Ventana de almacenamiento (`jump_buffer_time`):** `0.15 segundos` (150 ms)
+* **Comportamiento:** Previene la pérdida de pulsaciones si el jugador presiona el botón ligeramente antes de tocar la superficie.
+
+### 2. Coyote Time
+Otorga un margen de gracia para saltar tras haber dejado el borde de una plataforma.
+* **Tiempo de gracia (`coyote_time`):** `0.15 segundos` (150 ms)
+* **Comportamiento:** Mantiene activo el estado de "en suelo" durante una fracción de segundo en el aire para evitar caídas no intencionadas.
+
+### 3. Screenshake (Vibración de Cámara)
+Sistema dinámico de vibración localizado en `Player.gd` para enfatizar las acciones y el impacto.
+* **Disminución gradual (`shake_decay`):** `5.0`
+* **Intensidades por evento:**
+  - **Caminar:** `0.01` (Micro-vibración sutil)
+  - **Correr:** `0.03` (Vibración continua moderada)
+  - **Aterrizaje:** `0.15` (Impacto seco al tocar piso)
+  - **Daño Recibido:** `0.40` (Sacudida fuerte e inmediata)
+
+### 4. Direct Feedback y Movimiento
+* **Head Bobbing & Weight:** Balanceo sinusoidal de cámara en ejes X/Y y rotación Z (`walk_step_frequency: 12.0`, `run_step_frequency: 16.0`) para eliminar la sensación de flotación al desplazarse.
+* **Mecánica de Escondite:** Reducción/bloqueo parcial de vista, temporizador en HUD (*Aguantando la respiración: 5...*) e inmunidad temporal ante enemigos.
+* **Transiciones y Menús:** Soporte de salto directo de pantallas intermadias mediante la tecla `ENTER`.
