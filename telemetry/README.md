@@ -23,7 +23,9 @@ Si otro programa ocupa el puerto, ejecuta `python3 telemetry/server.py --port 87
 - Lista de sesiones, nombre del jugador, fecha, duración y estado.
 - Tiempo registrado, distancia aproximada, cantidad de acciones y niveles visitados.
 - Filtros por nivel, intento y tipo de actividad. Las muestras de posición se pueden mostrar aparte.
+- Comparación de duración, distancia, muertes y progreso por nivel entre hasta 30 partidas recientes de la misma instalación.
 - Recorrido sobre la geometría del nivel; obstáculos y altares se obtienen de los nodos reales del juego. El plano muestra coordenadas X/Z, no una captura de pantalla del nivel.
+- Mapa de calor de recorridos, derrotas, persecuciones, escondites y objetivos. Agrupa solo partidas del mismo nivel y con el mismo diseño registrado; en partidas antiguas sin geometría, muestra únicamente la partida elegida.
 - Reproducción de la ruta, control de tiempo, acercamiento, alejamiento y arrastre del plano. Pulsa la hora de una acción para ver ese momento.
 - Registro cronológico con datos de cada evento y exportación CSV. También existe exportación JSON por API.
 
@@ -83,10 +85,14 @@ Cada línea JSONL tiene esta forma (descripción del contrato; no se inserta en 
 | `/api/health` | Estado de SQLite, cantidades y líneas rechazadas |
 | `/api/sessions` | `{ "sessions": [...] }`, más recientes primero |
 | `/api/sessions/<session_id>` | `{ "session": {...}, "events": [...] }` |
+| `/api/comparison?sessions=id1,id2` | Eventos necesarios para comparar intentos entre partidas de una misma instalación |
+| `/api/heatmap?level=2&sessions=id1,id2` | Eventos espaciales recientes del nivel para calcular el mapa de calor |
 | `/api/export/<session_id>?format=csv` | Archivo CSV con todos los eventos de esa sesión |
 | `/api/export/<session_id>?format=json` | Archivo JSON con resumen y eventos |
 
 Los filtros y la reproducción de la web no alteran los datos. Las consultas SQL usan parámetros y el servidor publica una lista explícita de archivos web; no expone el archivo SQLite ni permite ejecutar SQL desde la página. La exportación CSV neutraliza fórmulas en campos de texto para abrirla en una hoja de cálculo.
+
+La comparación y el mapa de calor consultan como máximo 30 partidas recientes y 20.000 eventos por operación. El mapa de calor requiere que la partida tenga geometría del nivel registrada para poder combinarla de manera fiable con otras partidas. Al actualizar el panel publicado, vuelve a desplegar también la Edge Function `team-dashboard` para habilitar las dos consultas nuevas.
 
 ## Verificación
 

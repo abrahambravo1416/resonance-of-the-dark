@@ -32,7 +32,7 @@ const labels = {
   memory_collected:"Encuentra un recuerdo", npc_spoken:"Habla con un personaje",
 };
 const outcomeNames = {victory:"Campaña completada",quit:"Salida del juego",finished:"Partida terminada",completed:"Completada",game_over:"Fin de la partida",window_closed:"Ventana cerrada",application_closed:"Juego cerrado",returned_to_menu:"Regresó al menú",new_run:"Inició otra partida",verification_complete:"Verificación terminada"};
-const state = {sessions:[], selected:null, record:null, cursor:0, followEnd:true, playing:false, shown:100, zoom:1, pan:{x:0,y:0}, dragging:null, bounds:null, refreshBusy:false};
+const state = {sessions:[], selected:null, record:null, cursor:0, followEnd:true, playing:false, shown:100, zoom:1, pan:{x:0,y:0}, dragging:null, bounds:null, refreshBusy:false, comparisonKey:"", comparisonRevision:"", comparisonUpdatedAt:0, heatmap:null, heatmapBusy:false};
 let accessToken = teamMode ? sessionStorage.getItem("resonance-team-dashboard-token") || "" : "";
 const node = (tag, className, text) => {const el = document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
 const label = kind => labels[kind] || kind.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
@@ -47,7 +47,7 @@ async function readResponse(response){let body={};try{body=await response.json()
 async function api(action,payload={}){
   if(!teamMode){
     const paths={health:"/api/health",sessions:"/api/sessions"};
-    const path=action==="session"?`/api/sessions/${encodeURIComponent(payload.session_id)}`:paths[action];
+    const path=action==="session"?`/api/sessions/${encodeURIComponent(payload.session_id)}`:action==="heatmap"?`/api/heatmap?level=${encodeURIComponent(payload.level)}&sessions=${encodeURIComponent(payload.session_ids.join(","))}`:action==="comparison"?`/api/comparison?sessions=${encodeURIComponent(payload.session_ids.join(","))}`:paths[action];
     if(!path)throw Error("Acción de archivo desconocida.");
     return readResponse(await fetch(path,{cache:"no-store"}));
   }
@@ -131,11 +131,30 @@ async function loadSelected(reset){
   if(selected!==state.selected)return;
   const first=state.record===null || reset;
   const unchanged=!first && state.record.session.event_count===result.session.event_count && state.record.session.last_seen===result.session.last_seen && state.record.session.status===result.session.status;
+  const s=result.session;
+  const comparisonSessions=s.player_id?state.sessions.filter(item=>item.player_id===s.player_id).slice(0,30):[s];
+  if(!comparisonSessions.some(item=>item.session_id===s.session_id)){comparisonSessions.pop();comparisonSessions.unshift(s);}
+  const comparisonKey=comparisonSessions.map(item=>item.session_id).join("|");
+  const comparisonRevision=comparisonSessions.map(item=>`${item.session_id}:${item.event_count||0}:${item.last_seen||0}:${item.status}`).join("|");
+  const comparisonDue=Date.now()-state.comparisonUpdatedAt>=30000;
+  const shouldLoadComparison=first||comparisonKey!==state.comparisonKey||(comparisonRevision!==state.comparisonRevision&&comparisonDue);
+  const requestComparison=()=>{
+    state.comparisonKey=comparisonKey;state.comparisonRevision=comparisonRevision;state.comparisonUpdatedAt=Date.now();
+    if(first)renderAttemptComparison([],s,{loading:true});else $("comparison-count").textContent="Actualizando…";
+    loadAttemptComparison(s).catch(error=>{
+      if(selected!==state.selected)return;
+      state.comparisonKey="";state.comparisonUpdatedAt=0;
+      if(first)renderAttemptComparison([],s,{error:error.message||"No se pudieron cargar los intentos."});
+      else $("comparison-count").textContent="No se pudo actualizar";
+    });
+  };
+  if(unchanged){
+    if(shouldLoadComparison)requestComparison();
+    return;
+  }
   state.record=result;
   // Keep expanded event details and keyboard focus while nothing has changed.
-  if(unchanged)return;
   $("welcome").hidden=true;$("detail").hidden=false;
-  const s=result.session;
   $("session-date").textContent=`PARTIDA DEL ${formatDate(s.started_at).toLocaleUpperCase()} · ${formatHour(s.started_at)}`;
   $("session-title").textContent=s.player_name||"Explorador";
   const matchingSessions=s.player_id?state.sessions.filter(item=>item.player_id===s.player_id).length:1;
@@ -147,8 +166,11 @@ async function loadSelected(reset){
   $("actions").textContent=s.action_count.toLocaleString("es-MX");$("levels").textContent=String(s.level_count);
   renderSessionOutcome(s,result.events);
   renderObjectiveProgress(result.events);
+  if(shouldLoadComparison)requestComparison();
+  if(first){state.heatmap=null;setHeatmapMessage("Elige un nivel y genera el mapa para comparar partidas.");}
   $("export").href=teamMode?"#":`/api/export/${encodeURIComponent(s.session_id)}?format=csv`;
   const levels=[...new Set(result.events.map(event=>event.level).filter(level=>level>0))].sort((a,b)=>a-b);
+  if(first){const activeLevel=[...result.events].reverse().find(event=>event.kind==="level_started")?.level;if(Number(activeLevel)>0)$("heatmap-level").value=String(activeLevel);}
   fillSelect($("level"),levels.map(level=>[level,`Nivel ${level}`]),"Todos los niveles",first?"all":undefined);
   fillAttempts(first);
   const kinds=[...new Set(result.events.map(event=>event.kind))].filter(kind=>!sampleKinds.has(kind)).sort((a,b)=>label(a).localeCompare(label(b)));
@@ -157,6 +179,154 @@ async function loadSelected(reset){
   if(state.followEnd)state.cursor=s.duration;
   if(first){state.zoom=1;state.pan={x:0,y:0};}
   updateCursor();renderTimeline();drawMap();
+}
+async function loadAttemptComparison(session){
+  const candidates=session.player_id?state.sessions.filter(item=>item.player_id===session.player_id).slice(0,30):[session];
+  const selectedIndex=candidates.findIndex(item=>item.session_id===session.session_id);
+  if(selectedIndex<0){candidates.pop();candidates.unshift(session);}
+  const ids=candidates.map(item=>item.session_id);
+  const result=await api("comparison",{session_ids:ids});
+  if(state.selected!==session.session_id)return;
+  renderAttemptComparison(result.events||[],session,{sessions:candidates,truncated:result.truncated});
+}
+function groupLevelAttempts(events,sessions){
+  const groups=new Map(),latestByLevel=new Map(),sessionById=new Map(sessions.map(session=>[session.session_id,session]));
+  const sorted=[...events].sort((a,b)=>String(a.session_id).localeCompare(String(b.session_id))||Number(a.seq)-Number(b.seq));
+  for(const event of sorted){
+    const level=Number(event.level||0);if(level<1)continue;
+    const sessionId=String(event.session_id||"");const attempt=getAttempt(event);const levelKey=`${sessionId}:${level}`;let key;
+    if(event.kind==="level_started"){
+      key=attempt!=="0"?`${levelKey}:${attempt}`:`${levelKey}:legacy:${event.seq??groups.size}`;
+      if(!groups.has(key))groups.set(key,{level,attempt,session_id:sessionId,session:sessionById.get(sessionId),events:[],initial:{},started_seq:Number(event.seq)||0});
+      latestByLevel.set(levelKey,key);
+    }else{
+      key=attempt!=="0"?`${levelKey}:${attempt}`:latestByLevel.get(levelKey);
+      if(!key)continue;
+    }
+    if(!groups.has(key))groups.set(key,{level,attempt,session_id:sessionId,session:sessionById.get(sessionId),events:[],initial:{},started_seq:Number(event.seq)||0});
+    const group=groups.get(key);group.events.push(event);
+    if(event.kind==="level_started"&&event.data?.mission_progress&&typeof event.data.mission_progress==="object")group.initial=event.data.mission_progress;
+  }
+  const ordered=[...groups.values()].sort((a,b)=>Number(a.session?.started_at||0)-Number(b.session?.started_at||0)||a.level-b.level||a.started_seq-b.started_seq);
+  const ordinals=new Map();
+  for(const group of ordered){const key=`${group.session_id}:${group.level}`;const ordinal=(ordinals.get(key)||0)+1;ordinals.set(key,ordinal);group.attempt_number=ordinal;}
+  return ordered;
+}
+function renderAttemptComparison(events,session,{sessions=[session],truncated=false,loading=false,error=""}={}){
+  const groups=groupLevelAttempts(events,sessions),body=$("comparison-rows");
+  const uniqueSessions=new Set(groups.map(group=>group.session_id));
+  $("comparison-count").textContent=loading?"Cargando…":`${uniqueSessions.size} ${uniqueSessions.size===1?"partida":"partidas"} · ${groups.length} ${groups.length===1?"intento":"intentos"}`;
+  if(loading||!groups.length){
+    body.replaceChildren();const row=node("tr");const cell=node("td","comparison-empty",loading?"Cargando intentos recientes…":error||"No hay intentos de nivel registrados todavía.");cell.colSpan=7;row.append(cell);body.append(row);return;
+  }
+  const rows=groups.map(group=>{
+    const scoped=group.events;
+    const start=scoped.find(event=>event.kind==="level_started");
+    const firstElapsed=start?.elapsed??Math.min(...scoped.map(event=>event.elapsed));
+    const lastElapsed=Math.max(...scoped.map(event=>event.elapsed));
+    const levelEnd=scoped.find(event=>event.kind==="level_completed");
+    const seconds=Math.max(0,(levelEnd?.elapsed??lastElapsed)-firstElapsed);
+    const deaths=scoped.filter(event=>["player_died","player_death"].includes(event.kind)).length;
+    const positions=scoped.filter(event=>playerSampleKinds.has(event.kind)&&event.position).sort((a,b)=>a.elapsed-b.elapsed||a.seq-b.seq);
+    let distance=0,previous=null;
+    for(const event of positions){
+      if(previous&&event.elapsed-previous.elapsed<=8){const delta=Math.hypot(event.position.x-previous.position.x,event.position.z-previous.position.z);if(delta<25)distance+=delta;}
+      previous=event;
+    }
+    const specs=objectiveFallbacks[group.level]||[];
+    const objectiveTotals=specs.reduce((totals,spec)=>{const result=objectiveCounts(group,spec);totals.completed+=result.completed;totals.required+=result.total;return totals;},{completed:0,required:0});
+    const progress=objectiveTotals.required?Math.round(objectiveTotals.completed/objectiveTotals.required*100):0;
+    return {group,seconds,distance,deaths,progress,completed:!!levelEnd};
+  });
+  body.replaceChildren(...rows.map(({group,seconds,distance,deaths,progress,completed})=>{
+    const row=node("tr",completed?"comparison-row is-complete":"comparison-row");
+    const runLabel=group.session?`${formatDate(group.session.started_at)} · ${formatHour(group.session.started_at)}`:group.session_id.slice(0,12)||"Partida";
+    row.append(node("td","comparison-run",runLabel),node("td","comparison-level",`Nivel ${group.level}`),node("td","comparison-attempt",`#${group.attempt_number}`),node("td","comparison-value",duration(seconds)),node("td","comparison-value",`${distance.toLocaleString("es-MX",{maximumFractionDigits:1})} m`),node("td",`comparison-deaths${deaths?" has-deaths":""}`,String(deaths)));
+    const progressCell=node("td","comparison-progress");const track=node("span","comparison-track");const fill=node("span");fill.style.width=`${progress}%`;track.append(fill);progressCell.append(node("strong",null,`${progress}%`),track);row.append(progressCell);return row;
+  }));
+  if(truncated){const row=node("tr");const cell=node("td","comparison-empty","Se alcanzó el límite de eventos; se priorizaron las partidas más recientes.");cell.colSpan=7;row.append(cell);body.append(row);}
+}
+function setHeatmapMessage(message){$("heatmap-status").textContent=message;}
+async function generateHeatmap(){
+  if(state.heatmapBusy)return;
+  const level=Number($("heatmap-level").value);
+  const recent=state.sessions.slice(0,30).map(session=>session.session_id);
+  if(state.selected&&!recent.includes(state.selected)){recent.pop();recent.unshift(state.selected);}
+  if(!recent.length){setHeatmapMessage("No hay partidas registradas para comparar.");return;}
+  state.heatmapBusy=true;$("heatmap-run").disabled=true;$("heatmap-run").textContent="Calculando…";
+  setHeatmapMessage(`Analizando hasta ${recent.length} partidas recientes del Nivel ${level}…`);
+  try{
+    state.heatmap=await api("heatmap",{level,session_ids:recent});
+    state.heatmap.level=level;
+    drawHeatmap();
+  }catch(error){state.heatmap=null;setHeatmapMessage(error.message||"No se pudo generar el mapa de calor.");drawHeatmap();}
+  finally{state.heatmapBusy=false;$("heatmap-run").disabled=false;$("heatmap-run").textContent="Generar mapa";}
+}
+function rounded(value){return Math.round(Number(value||0)*100)/100;}
+function mapLayoutSignature(event){
+  const data=event.data||{},bounds=data.map_bounds||{},geometry=data.map_geometry||{};
+  if(!Object.hasOwn(data,"map_geometry"))return null;
+  const obstacles=(Array.isArray(geometry.obstacles)?geometry.obstacles:[]).map(item=>[rounded(item.x),rounded(item.z),rounded(item.width),rounded(item.depth),rounded(item.yaw)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const altars=(Array.isArray(geometry.altars)?geometry.altars:[]).map(item=>[rounded(item.x),rounded(item.z)]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const mapBounds=[bounds.min_x,bounds.max_x,bounds.min_z,bounds.max_z].map(rounded);
+  return JSON.stringify([event.level,mapBounds,obstacles,altars]);
+}
+function heatEventsForCategory(events,category){
+  return events.filter(event=>{
+    const data=event.data||{},kind=event.kind;
+    const playerPoint=playerSampleKinds.has(kind), enemyPoint=kind==="enemy_position_sample";
+    if(category==="movement")return playerPoint;
+    if(category==="deaths")return ["player_died","player_death"].includes(kind);
+    if(category==="chases")return (kind==="enemy_state_changed"&&String(data.state||"").toLowerCase().includes("chase"))||(enemyPoint&&String(data.state||"").toLowerCase().includes("chase"));
+    if(category==="hiding")return Replay.hideKinds.has(kind)||data.hiding===true||data.hidden===true;
+    if(category==="objectives")return ["pumpkin_collected","altar_activated","relic_delivered","health_skull_collected","skull_collected","item_collected","collectible_collected"].includes(kind);
+    return playerPoint||enemyPoint||["player_died","player_death","enemy_state_changed","pumpkin_collected","altar_activated","relic_delivered","health_skull_collected","skull_collected","item_collected","collectible_collected"].includes(kind)||Replay.hideKinds.has(kind);
+  }).filter(event=>event.position&&Number.isFinite(event.position.x)&&Number.isFinite(event.position.z));
+}
+function drawHeatmap(){
+  const canvas=$("heatmap-canvas"),rect=canvas.getBoundingClientRect();if(!rect.width||!rect.height)return;
+  const dpr=window.devicePixelRatio||1;canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);
+  const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);const w=rect.width,h=rect.height;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#0d1712";ctx.fillRect(0,0,w,h);
+  const result=state.heatmap,level=Number($("heatmap-level").value),category=$("heatmap-kind").value;
+  if(!result||Number(result.level)!==level){$("heatmap-empty").hidden=false;$("heatmap-sample-count").textContent="";return;}
+  const allEvents=result.events||[];
+  const starts=allEvents.filter(event=>event.kind==="level_started");
+  const candidates=allEvents.filter(event=>Number(event.level)===level);
+  const levelStarts=starts.filter(event=>Number(event.level)===level);
+  const selectedStarts=levelStarts.filter(event=>event.session_id===state.selected).sort((a,b)=>Number(a.seq)-Number(b.seq));
+  const selectedStart=selectedStarts.at(-1)||levelStarts.reduce((latest,event)=>!latest||Number(event.ts)>Number(latest.ts)?event:latest,null);
+  if(!selectedStart){$("heatmap-empty").hidden=false;setHeatmapMessage("No hay datos de diseño de mapa para estas partidas.");return;}
+  const signature=mapLayoutSignature(selectedStart);
+  const matchingStarts=signature===null?[selectedStart]:starts.filter(event=>mapLayoutSignature(event)===signature);
+  const compatibleKeys=new Set(matchingStarts.map(event=>`${event.session_id}:${getAttempt(event)}`));
+  const compatible= candidates.filter(event=>compatibleKeys.has(`${event.session_id}:${getAttempt(event)}`));
+  const points=heatEventsForCategory(compatible,category);
+  const mapData=selectedStart.data||{},bounds=mapData.map_bounds||{};
+  let minX=Number(bounds.min_x),maxX=Number(bounds.max_x),minZ=Number(bounds.min_z),maxZ=Number(bounds.max_z);
+  if(![minX,maxX,minZ,maxZ].every(Number.isFinite)&&points.length){const limits=points.reduce((value,event)=>({minX:Math.min(value.minX,event.position.x),maxX:Math.max(value.maxX,event.position.x),minZ:Math.min(value.minZ,event.position.z),maxZ:Math.max(value.maxZ,event.position.z)}),{minX:Infinity,maxX:-Infinity,minZ:Infinity,maxZ:-Infinity});minX=limits.minX;maxX=limits.maxX;minZ=limits.minZ;maxZ=limits.maxZ;}
+  if(![minX,maxX,minZ,maxZ].every(Number.isFinite)){minX=minZ=-10;maxX=maxZ=10;}
+  const pad=2;minX-=pad;maxX+=pad;minZ-=pad;maxZ+=pad;
+  const scale=Math.min((w-60)/(maxX-minX),(h-50)/(maxZ-minZ));
+  const mapW=(maxX-minX)*scale,mapH=(maxZ-minZ)*scale,offsetX=(w-mapW)/2,offsetY=(h-mapH)/2;
+  const xy=p=>({x:offsetX+(p.x-minX)*scale,y:offsetY+(p.z-minZ)*scale});
+  ctx.strokeStyle="#20392c";ctx.lineWidth=1;
+  for(let x=offsetX;x<=offsetX+mapW;x+=Math.max(24,scale*2)){ctx.beginPath();ctx.moveTo(x,offsetY);ctx.lineTo(x,offsetY+mapH);ctx.stroke();}
+  for(let y=offsetY;y<=offsetY+mapH;y+=Math.max(24,scale*2)){ctx.beginPath();ctx.moveTo(offsetX,y);ctx.lineTo(offsetX+mapW,y);ctx.stroke();}
+  const geometry=mapData.map_geometry||{};
+  for(const obstacle of geometry.obstacles||[]){if(![obstacle.x,obstacle.z,obstacle.width,obstacle.depth].every(Number.isFinite))continue;const p=xy(obstacle);ctx.save();ctx.translate(p.x,p.y);ctx.rotate(-(Number(obstacle.yaw)||0));ctx.fillStyle="#2a423455";ctx.fillRect(-obstacle.width*scale/2,-obstacle.depth*scale/2,obstacle.width*scale,obstacle.depth*scale);ctx.restore();}
+  for(const altar of geometry.altars||[]){const p=xy(altar);ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fillStyle="#b49e63";ctx.fill();}
+  const bins=new Map(),resolution=1.3;
+  for(const event of points){const x=Math.floor(event.position.x/resolution),z=Math.floor(event.position.z/resolution),key=`${x},${z}`;bins.set(key,(bins.get(key)||0)+1);}
+  const maximum=Math.max(1,[...bins.values()].reduce((max,value)=>Math.max(max,value),0));
+  for(const [key,count] of bins){const [bx,bz]=key.split(",").map(Number),p=xy({x:(bx+.5)*resolution,z:(bz+.5)*resolution});const intensity=Math.log1p(count)/Math.log1p(maximum);const color=intensity>.72?"255,75,58":intensity>.45?"255,173,57":intensity>.23?"195,217,83":"70,194,176";const radius=Math.max(10,Math.min(30,scale*1.4));const gradient=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);gradient.addColorStop(0,`rgba(${color},${.48*intensity+.12})`);gradient.addColorStop(1,`rgba(${color},0)`);ctx.fillStyle=gradient;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,Math.PI*2);ctx.fill();}
+  $("heatmap-empty").hidden=points.length>0;
+  const runCount=new Set(matchingStarts.map(event=>event.session_id)).size;
+  const eventCounts={deaths:compatible.filter(event=>["player_died","player_death"].includes(event.kind)).length,chases:compatible.filter(event=>event.kind==="enemy_state_changed"&&String(event.data?.state||"").toLowerCase().includes("chase")).length,hides:compatible.filter(event=>Replay.hideKinds.has(event.kind)).length,objectives:compatible.filter(event=>["pumpkin_collected","altar_activated","relic_delivered","health_skull_collected","skull_collected","item_collected","collectible_collected"].includes(event.kind)).length};
+  const kindName={all:"toda la actividad",movement:"recorridos",deaths:"derrotas",chases:"persecuciones",hiding:"escondites",objectives:"objetivos"}[category]||"actividad";
+  const layoutNote=mapLayoutSignature(selectedStart)===null?" · mapa antiguo sin geometría; solo se compara esta partida":"";
+  setHeatmapMessage(`${runCount} partidas compatibles · ${points.length.toLocaleString("es-MX")} puntos de ${kindName}${layoutNote}${result.truncated?" · consulta limitada a los eventos más recientes":""}.`);
+  $("heatmap-sample-count").textContent=`${eventCounts.deaths} derrotas · ${eventCounts.chases} cambios a persecución · ${eventCounts.hides} cambios de escondite · ${eventCounts.objectives} objetivos`;
 }
 function renderSessionOutcome(session,events){
   const campaign=[...events].reverse().find(event=>event.kind==="campaign_completed");
@@ -445,6 +615,9 @@ $("level").addEventListener("change",()=>{fillAttempts(true);state.shown=100;sta
 $("attempt").addEventListener("change",()=>{state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
 for(const id of ["kind","samples"])$(id).addEventListener("change",()=>{state.shown=100;renderTimeline();drawMap();});
 $("enemies").addEventListener("change",drawMap);
+$("heatmap-run").addEventListener("click",generateHeatmap);
+$("heatmap-level").addEventListener("change",()=>{state.heatmap=null;setHeatmapMessage("Genera de nuevo el mapa para este nivel.");drawHeatmap();});
+$("heatmap-kind").addEventListener("change",drawHeatmap);
 $("more").addEventListener("click",()=>{state.shown+=100;renderTimeline();});
 $("cursor").addEventListener("input",()=>{state.followEnd=false;state.playing=false;state.cursor=Number($("cursor").value);updateCursor();drawMap();});
 $("play").addEventListener("click",()=>{state.playing=!state.playing;state.followEnd=false;if(state.cursor>=(state.record?.session.duration||0))state.cursor=0;updateCursor();});
@@ -457,6 +630,7 @@ $("map").addEventListener("pointerdown",event=>{state.dragging={x:event.clientX,
 $("map").addEventListener("pointermove",event=>{if(!state.dragging)return;state.pan.x+=event.clientX-state.dragging.x;state.pan.y+=event.clientY-state.dragging.y;state.dragging={x:event.clientX,y:event.clientY};drawMap();});
 $("map").addEventListener("pointerup",()=>{state.dragging=null;});$("map").addEventListener("pointercancel",()=>{state.dragging=null;});
 new ResizeObserver(drawMap).observe($("map"));
+new ResizeObserver(drawHeatmap).observe($("heatmap-canvas"));
 setInterval(()=>{if(!state.playing||!state.record)return;state.cursor=Math.min(state.cursor+.25,state.record.session.duration);if(state.cursor>=state.record.session.duration)state.playing=false;updateCursor();drawMap();},100);
 setInterval(()=>{if(!document.hidden)refresh();},5000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});

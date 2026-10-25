@@ -26,6 +26,21 @@ MAX_LINE = 512 * 1024
 IMPORT_BUDGET = 16 * 1024 * 1024
 SAMPLE_KINDS = {"position", "position_sample", "player_position", "movement_sample"}
 ALL_SAMPLE_KINDS = SAMPLE_KINDS | {"enemy_position_sample"}
+HEATMAP_KINDS = ALL_SAMPLE_KINDS | {
+    "level_started", "player_died", "player_death", "enemy_state_changed",
+    "hiding_started", "hiding_ended", "hiding_zone_entered", "hiding_zone_left",
+    "hide_started", "hide_ended", "hide_exit_completed", "pumpkin_collected",
+    "altar_activated", "relic_delivered", "health_skull_collected", "skull_collected",
+    "item_collected", "collectible_collected",
+}
+COMPARISON_KINDS = SAMPLE_KINDS | {
+    "level_started", "level_completed", "player_died", "player_death",
+    "pumpkin_collected", "altar_activated", "relic_delivered", "item_collected",
+    "collectible_collected", "mission_completed", "quest_completed", "exit_unlocked",
+}
+MAX_HEATMAP_SESSIONS = 30
+MAX_HEATMAP_EVENTS = 20000
+MAX_COMPARISON_EVENTS = 20000
 
 
 def number(value, default=None):
@@ -187,6 +202,34 @@ class Archive:
             events = db.execute("SELECT * FROM events WHERE session_id=? ORDER BY seq,ts", (session_id,)).fetchall()
             return {"session": self.summarize(row, events), "events": [self.event_dict(event) for event in events]}
 
+    def heatmap(self, session_ids, level):
+        ids = [value for value in dict.fromkeys(session_ids) if isinstance(value, str) and 0 < len(value) <= 100 and all(char.isalnum() or char in "_-" for char in value)][:MAX_HEATMAP_SESSIONS]
+        if not ids:
+            return {"events": [], "truncated": False}
+        placeholders = ",".join("?" for _ in ids)
+        kinds = sorted(HEATMAP_KINDS)
+        kind_placeholders = ",".join("?" for _ in kinds)
+        query = f"SELECT * FROM events WHERE session_id IN ({placeholders}) AND level=? AND kind IN ({kind_placeholders}) ORDER BY session_id DESC,seq,ts LIMIT ?"
+        with closing(self.connect()) as db:
+            rows = db.execute(query, (*ids, level, *kinds, MAX_HEATMAP_EVENTS + 1)).fetchall()
+        truncated = len(rows) > MAX_HEATMAP_EVENTS
+        events = [self.event_dict(row) for row in rows[:MAX_HEATMAP_EVENTS]]
+        return {"events": events, "truncated": truncated}
+
+    def comparison(self, session_ids):
+        ids = [value for value in dict.fromkeys(session_ids) if isinstance(value, str) and 0 < len(value) <= 100 and all(char.isalnum() or char in "_-" for char in value)][:MAX_HEATMAP_SESSIONS]
+        if not ids:
+            return {"events": [], "truncated": False}
+        placeholders = ",".join("?" for _ in ids)
+        kinds = sorted(COMPARISON_KINDS)
+        kind_placeholders = ",".join("?" for _ in kinds)
+        query = f"SELECT * FROM events WHERE session_id IN ({placeholders}) AND kind IN ({kind_placeholders}) ORDER BY session_id DESC,seq,ts LIMIT ?"
+        with closing(self.connect()) as db:
+            rows = db.execute(query, (*ids, *kinds, MAX_COMPARISON_EVENTS + 1)).fetchall()
+        truncated = len(rows) > MAX_COMPARISON_EVENTS
+        events = [self.event_dict(row) for row in rows[:MAX_COMPARISON_EVENTS]]
+        return {"events": events, "truncated": truncated}
+
     def health(self):
         with closing(self.connect()) as db:
             imported, rejected = db.execute("SELECT COALESCE(SUM(imported_count),0),COALESCE(SUM(rejected_count),0) FROM ingestion_sources").fetchone()
@@ -270,6 +313,83 @@ class RemoteArchive:
             })
         return {"session": summary, "events": events}
 
+    def heatmap(self, session_ids, level):
+        ids = [value for value in dict.fromkeys(session_ids) if isinstance(value, str) and 0 < len(value) <= 100 and all(char.isalnum() or char in "_-" for char in value)][:MAX_HEATMAP_SESSIONS]
+        if not ids:
+            return {"events": [], "truncated": False}
+        escaped_ids = ','.join('"' + value.replace('"', '') + '"' for value in ids)
+        query = {
+            "select": "event_id,session_id,seq,kind,ts,elapsed,level,x,y,z,data",
+            "session_id": "in.(" + escaped_ids + ")",
+            "level": "eq." + str(level),
+            "kind": "in.(" + ",".join(sorted(HEATMAP_KINDS)) + ")",
+            "order": "session_id.desc,seq.asc,ts.asc",
+        }
+        rows = []
+        offset = 0
+        while len(rows) <= MAX_HEATMAP_EVENTS:
+            page_query = dict(query)
+            page_query.update({"limit": str(min(self.PAGE_SIZE, MAX_HEATMAP_EVENTS + 1 - len(rows))), "offset": str(offset)})
+            encoded = urlencode(page_query, safe=",()*")
+            page = self._request_json("/rest/v1/game_events?%s" % encoded)
+            if not isinstance(page, list):
+                raise OSError("Supabase devolvió una respuesta inesperada.")
+            rows.extend(page)
+            if len(page) < min(self.PAGE_SIZE, MAX_HEATMAP_EVENTS + 1 - (len(rows) - len(page))):
+                break
+            offset += len(page)
+        truncated = len(rows) > MAX_HEATMAP_EVENTS
+        events = []
+        for row in rows[:MAX_HEATMAP_EVENTS]:
+            position = None
+            if row.get("x") is not None and row.get("y") is not None and row.get("z") is not None:
+                position = {"x": row["x"], "y": row["y"], "z": row["z"]}
+            events.append({
+                "event_id": row["event_id"], "session_id": row["session_id"], "seq": row["seq"],
+                "kind": row["kind"], "ts": row["ts"], "elapsed": row["elapsed"],
+                "level": row["level"], "position": position, "data": row.get("data") or {},
+            })
+        return {"events": events, "truncated": truncated}
+
+    def comparison(self, session_ids):
+        ids = [value for value in dict.fromkeys(session_ids) if isinstance(value, str) and 0 < len(value) <= 100 and all(char.isalnum() or char in "_-" for char in value)][:MAX_HEATMAP_SESSIONS]
+        if not ids:
+            return {"events": [], "truncated": False}
+        escaped_ids = ','.join('"' + value.replace('"', '') + '"' for value in ids)
+        query = {
+            "select": "event_id,session_id,seq,kind,ts,elapsed,level,x,y,z,data",
+            "session_id": "in.(" + escaped_ids + ")",
+            "kind": "in.(" + ",".join(sorted(COMPARISON_KINDS)) + ")",
+            "order": "session_id.desc,seq.asc,ts.asc",
+        }
+        rows = []
+        offset = 0
+        while len(rows) <= MAX_COMPARISON_EVENTS:
+            page_query = dict(query)
+            page_limit = min(self.PAGE_SIZE, MAX_COMPARISON_EVENTS + 1 - len(rows))
+            page_query.update({"limit": str(page_limit), "offset": str(offset)})
+            encoded = urlencode(page_query, safe=",()*")
+            page = self._request_json("/rest/v1/game_events?%s" % encoded)
+            if not isinstance(page, list):
+                raise OSError("Supabase devolvió una respuesta inesperada.")
+            rows.extend(page)
+            if len(page) < page_limit:
+                break
+            offset += len(page)
+        truncated = len(rows) > MAX_COMPARISON_EVENTS
+        events = []
+        for row in rows[:MAX_COMPARISON_EVENTS]:
+            position = None
+            if row.get("x") is not None and row.get("y") is not None and row.get("z") is not None:
+                position = {"x": row["x"], "y": row["y"], "z": row["z"]}
+            events.append({
+                "event_id": row["event_id"], "session_id": row["session_id"],
+                "seq": row["seq"], "kind": row["kind"], "ts": row["ts"],
+                "elapsed": row["elapsed"], "level": row["level"],
+                "position": position, "data": row.get("data") or {},
+            })
+        return {"events": events, "truncated": truncated}
+
     def health(self):
         summaries = self._all_rows("game_session_summary", {"select": "event_count"})
         return {"ok": True, "database": "Supabase Postgres", "schema_version": 1,
@@ -334,6 +454,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     return self.respond(data_source.health())
                 if path == "/api/sessions":
                     return self.respond({"sessions": data_source.sessions()})
+                if path == "/api/heatmap":
+                    query = parse_qs(parsed.query)
+                    level_value = number(query.get("level", [""])[0])
+                    session_ids = [value for value in query.get("sessions", [""])[0].split(",") if value]
+                    if level_value is None or level_value != int(level_value) or not 1 <= int(level_value) <= 4:
+                        return self.respond({"error": "Nivel inválido para el mapa de calor."}, 400)
+                    if len(session_ids) > MAX_HEATMAP_SESSIONS:
+                        return self.respond({"error": "Selecciona como máximo 30 partidas."}, 400)
+                    if not session_ids or any(not value or len(value) > 100 or not all(char.isalnum() or char in "_-" for char in value) for value in session_ids):
+                        return self.respond({"error": "Las partidas seleccionadas no son válidas."}, 400)
+                    return self.respond(data_source.heatmap(session_ids, int(level_value)))
+                if path == "/api/comparison":
+                    query = parse_qs(parsed.query)
+                    session_ids = [value for value in query.get("sessions", [""])[0].split(",") if value]
+                    if len(session_ids) > MAX_HEATMAP_SESSIONS:
+                        return self.respond({"error": "Selecciona como máximo 30 partidas."}, 400)
+                    if not session_ids or any(not value or len(value) > 100 or not all(char.isalnum() or char in "_-" for char in value) for value in session_ids):
+                        return self.respond({"error": "Las partidas seleccionadas no son válidas."}, 400)
+                    return self.respond(data_source.comparison(session_ids))
                 prefix = next((prefix for prefix in ("/api/sessions/", "/api/export/") if path.startswith(prefix)), None)
                 if prefix:
                     session_id = path[len(prefix):]
