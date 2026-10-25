@@ -8,6 +8,7 @@ import io
 import json
 import math
 import mimetypes
+import os
 import sqlite3
 import socketserver
 import threading
@@ -16,7 +17,9 @@ from contextlib import closing
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
 MAX_LINE = 512 * 1024
@@ -77,6 +80,9 @@ class Archive:
         with closing(self.connect()) as db:
             db.execute("PRAGMA journal_mode = WAL")
             db.executescript((ROOT / "schema.sql").read_text(encoding="utf-8"))
+            session_columns = {row["name"] for row in db.execute("PRAGMA table_info(sessions)")}
+            if "player_id" not in session_columns:
+                db.execute("ALTER TABLE sessions ADD COLUMN player_id TEXT")
             db.commit()
 
     def connect(self):
@@ -131,7 +137,7 @@ class Archive:
                             db.execute("UPDATE sessions SET started_at=MIN(started_at,?),last_seen=MAX(last_seen,?) WHERE session_id=?", (ts, ts, session_id))
                             data = json.loads(data_json)
                             if kind == "session_started":
-                                db.execute("UPDATE sessions SET player_name=?,game_version=? WHERE session_id=?", (str(data.get("player_name", ""))[:200], str(data.get("game_version", ""))[:100], session_id))
+                                db.execute("UPDATE sessions SET player_id=?,player_name=?,game_version=? WHERE session_id=?", (str(data.get("player_id", ""))[:100] or None, str(data.get("player_name", ""))[:200], str(data.get("game_version", ""))[:100], session_id))
                             elif kind == "session_ended":
                                 db.execute("UPDATE sessions SET ended_at=?,outcome=? WHERE session_id=?", (ts, str(data.get("outcome", "finished"))[:100], session_id))
                             imported += 1
@@ -190,11 +196,94 @@ class Archive:
                     "rejected_lines": rejected, "ingestion_error": self.last_error}
 
 
+class RemoteArchive:
+    """Read-only Supabase adapter for the existing local dashboard."""
+
+    PAGE_SIZE = 1000
+
+    def __init__(self, project_url, secret_key):
+        self.project_url = project_url.rstrip("/")
+        self.secret_key = secret_key
+
+    def _request_json(self, path, headers=None):
+        request_headers = {"apikey": self.secret_key, "Accept": "application/json"}
+        if headers:
+            request_headers.update(headers)
+        request = Request(self.project_url + path, headers=request_headers, method="GET")
+        try:
+            with urlopen(request, timeout=12) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, json.JSONDecodeError) as error:
+            # Never surface request headers or keys in the local dashboard response.
+            raise OSError("No se pudo consultar Supabase; revisa URL, clave y conexión.") from error
+
+    def _all_rows(self, resource, query):
+        rows = []
+        offset = 0
+        while True:
+            parameters = dict(query)
+            parameters.update({"limit": str(self.PAGE_SIZE), "offset": str(offset)})
+            encoded = urlencode(parameters, safe=",()*")
+            page = self._request_json("/rest/v1/%s?%s" % (resource, encoded))
+            if not isinstance(page, list):
+                raise OSError("Supabase devolvió una respuesta inesperada.")
+            rows.extend(page)
+            if len(page) < self.PAGE_SIZE:
+                break
+            offset += len(page)
+        return rows
+
+    @staticmethod
+    def _with_status(row):
+        result = dict(row)
+        ended_at = result.get("ended_at")
+        last_seen = number(result.get("last_seen"), 0.0)
+        result["status"] = "finished" if ended_at is not None else ("active" if time.time() - last_seen < 45 else "inactive")
+        return result
+
+    def sessions(self):
+        rows = self._all_rows("game_session_summary", {"select": "*", "order": "started_at.desc"})
+        return [self._with_status(row) for row in rows]
+
+    def session(self, session_id):
+        rows = self._all_rows("game_session_summary", {
+            "select": "*", "session_id": "eq." + session_id,
+        })
+        if not rows:
+            return None
+        summary = self._with_status(rows[0])
+        raw_events = self._all_rows("game_events", {
+            "select": "event_id,session_id,seq,kind,ts,elapsed,level,x,y,z,data",
+            "session_id": "eq." + session_id,
+            "order": "seq.asc,ts.asc",
+        })
+        events = []
+        for row in raw_events:
+            position = None
+            if row.get("x") is not None and row.get("y") is not None and row.get("z") is not None:
+                position = {"x": row["x"], "y": row["y"], "z": row["z"]}
+            events.append({
+                "event_id": row["event_id"], "session_id": row["session_id"],
+                "seq": row["seq"], "kind": row["kind"], "ts": row["ts"],
+                "elapsed": row["elapsed"], "level": row["level"],
+                "position": position, "data": row.get("data") or {},
+            })
+        return {"session": summary, "events": events}
+
+    def health(self):
+        summaries = self._all_rows("game_session_summary", {"select": "event_count"})
+        return {"ok": True, "database": "Supabase Postgres", "schema_version": 1,
+                "session_count": len(summaries),
+                "event_count": sum(int(row.get("event_count") or 0) for row in summaries),
+                "rejected_lines": 0, "ingestion_error": None}
+
+
 class DashboardServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, archive):
+    def __init__(self, address, archive, remote_archive=None):
         self.archive = archive
+        self.remote_archive = remote_archive
         super().__init__(address, DashboardHandler)
 
     def server_bind(self):
@@ -230,17 +319,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlsplit(self.path)
         path = unquote(parsed.path)
+        if path == "/config.js":
+            # The loopback archive keeps its local API; the hosted static site
+            # ships the separate team-login configuration from telemetry/web.
+            return self.respond(
+                b'window.RESONANCE_ARCHIVE_CONFIG = { mode: "local" };',
+                content_type="application/javascript; charset=utf-8",
+            )
         if path.startswith("/api/"):
             try:
                 self.server.archive.import_pending()
+                data_source = self.server.remote_archive or self.server.archive
                 if path == "/api/health":
-                    return self.respond(self.server.archive.health())
+                    return self.respond(data_source.health())
                 if path == "/api/sessions":
-                    return self.respond({"sessions": self.server.archive.sessions()})
+                    return self.respond({"sessions": data_source.sessions()})
                 prefix = next((prefix for prefix in ("/api/sessions/", "/api/export/") if path.startswith(prefix)), None)
                 if prefix:
                     session_id = path[len(prefix):]
-                    record = self.server.archive.session(session_id)
+                    record = data_source.session(session_id)
                     if record is None:
                         return self.respond({"error": "La partida no existe."}, 404)
                     if prefix == "/api/sessions/":
@@ -264,7 +361,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return self.respond({"error": "Ruta no encontrada."}, 404)
             except (sqlite3.Error, OSError) as error:
                 self.server.archive.last_error = type(error).__name__
-                return self.respond({"error": "No se pudo consultar el archivo local. Revisa la terminal."}, 503)
+                return self.respond({"error": "No se pudo consultar el archivo de partidas. Revisa URL, permisos y conexión del servidor."}, 503)
         # Explicit allowlist avoids exposing SQLite, logs, Python or project files.
         assets = {"/": "index.html", "/index.html": "index.html", "/style.css": "style.css", "/app.js": "app.js", "/replay.js": "replay.js", "/favicon.svg": "favicon.svg"}
         filename = assets.get(path)
@@ -282,6 +379,7 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data", help="Directorio SQLite y spool (por defecto telemetry/data)")
     parser.add_argument("--spool-dir", type=Path, help="Lee los JSONL de esta carpeta; útil para el user:// de una exportación")
+    parser.add_argument("--supabase-url", default=os.environ.get("SUPABASE_URL", ""), help="URL del proyecto; también puede venir de SUPABASE_URL")
     parser.add_argument("--import-only", action="store_true", help="Importa los logs pendientes y termina")
     args = parser.parse_args()
     if not 0 <= args.port <= 65535:
@@ -291,8 +389,15 @@ def main():
     if args.import_only:
         print(json.dumps(archive.health(), ensure_ascii=False))
         return
+    secret_key = os.environ.get("SUPABASE_SECRET_KEY", "") or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    remote_archive = None
+    if args.supabase_url and secret_key:
+        remote_archive = RemoteArchive(args.supabase_url, secret_key)
+        print("Panel conectado a Supabase. La clave permanece en este proceso local.", flush=True)
+    elif args.supabase_url or secret_key:
+        print("Configuración de Supabase incompleta; el panel seguirá usando el archivo SQLite local.", flush=True)
     try:
-        server = DashboardServer((args.host, args.port), archive)
+        server = DashboardServer((args.host, args.port), archive, remote_archive)
     except OSError as error:
         parser.exit(1, f"No se pudo abrir el puerto {args.port}: {error}\nPrueba --port 8766.\n")
     stop = threading.Event()

@@ -7,8 +7,16 @@ extends Node
 @export var minimum_sample_distance: float = 0.12
 @export var launch_local_dashboard: bool = true
 @export var dashboard_port: int = 8765
+## La URL de la Edge Function y la clave publishable son configuración pública del cliente.
+## La clave secret/service_role nunca debe colocarse aquí ni distribuirse con el juego.
+@export var remote_ingest_url: String = ""
+@export var remote_publishable_key: String = ""
+@export_range(5.0, 120.0, 1.0) var remote_upload_interval: float = 15.0
+@export_range(1, 100, 1) var remote_batch_size: int = 50
 
 var session_id: String = ""
+var player_id: String = ""
+var player_name: String = "Invitado"
 var current_level: int = 0
 var attempt: int = 0
 var log_path: String = ""
@@ -24,19 +32,43 @@ var _enemy_states: Dictionary = {}
 var _enemy_names: Dictionary = {}
 var _web_started: bool = false
 var _closing: bool = false
+var _upload_request: HTTPRequest
+var _upload_timer: Timer
+var _upload_offsets: Dictionary = {}
+var _pending_upload_offsets: Dictionary = {}
+var _upload_in_flight: bool = false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_load_player_profile()
+	_upload_request = HTTPRequest.new()
+	_upload_request.timeout = 20.0
+	_upload_request.request_completed.connect(_on_upload_completed)
+	add_child(_upload_request)
+	_upload_timer = Timer.new()
+	_upload_timer.wait_time = maxf(remote_upload_interval, 5.0)
+	_upload_timer.timeout.connect(_upload_pending_logs)
+	add_child(_upload_timer)
+	_load_upload_offsets()
+	_upload_timer.start()
 	if OS.get_environment("RESONANCE_CAPTURE") == "1":
 		enabled = false
 	if enabled:
 		get_tree().auto_accept_quit = false
 
 
-func start_session(player_name: String = "Visitante") -> void:
+func start_session(requested_player_name: String = "") -> void:
 	if not enabled:
 		return
+	var resolved_player_name := requested_player_name.strip_edges()
+	if resolved_player_name.is_empty():
+		var account := get_node_or_null("/root/CloudAccount")
+		if account != null and bool(account.get("is_authenticated")):
+			resolved_player_name = str(account.get("username")).strip_edges()
+	if resolved_player_name.is_empty():
+		resolved_player_name = "Invitado"
+	set_player_name(resolved_player_name)
 	if not session_id.is_empty():
 		end_session("new_run")
 	var spool_dir := _spool_directory()
@@ -63,8 +95,43 @@ func start_session(player_name: String = "Visitante") -> void:
 	_was_paused = false
 	_enemy_states.clear()
 	_enemy_names.clear()
-	record("session_started", {"player_name": player_name.strip_edges().left(60) if not player_name.strip_edges().is_empty() else "Visitante", "game_version": "resonance-local-2", "position_interval_seconds": sample_interval, "enemy_position_interval_seconds": sample_interval})
+	record("session_started", {"player_id": player_id, "player_name": player_name, "game_version": "resonance-local-3", "position_interval_seconds": sample_interval, "enemy_position_interval_seconds": sample_interval})
 	_start_local_dashboard()
+
+
+func get_player_id() -> String:
+	return player_id
+
+
+func get_player_name() -> String:
+	return player_name
+
+
+func set_player_name(value: String) -> void:
+	var cleaned_name := value.strip_edges().left(48)
+	player_name = cleaned_name if not cleaned_name.is_empty() else "Invitado"
+	_save_player_profile()
+
+
+func _load_player_profile() -> void:
+	var profile := ConfigFile.new()
+	if profile.load("user://player_profile.cfg") == OK:
+		player_id = str(profile.get_value("profile", "player_id", ""))
+		player_name = str(profile.get_value("profile", "player_name", "Invitado")).strip_edges().left(48)
+	if player_id.is_empty():
+		player_id = Crypto.new().generate_random_bytes(16).hex_encode()
+	if player_name.is_empty() or player_name.to_lower() == "visitante":
+		player_name = "Invitado"
+	_save_player_profile()
+
+
+func _save_player_profile() -> void:
+	var profile := ConfigFile.new()
+	profile.set_value("profile", "player_id", player_id)
+	profile.set_value("profile", "player_name", player_name)
+	var error := profile.save("user://player_profile.cfg")
+	if error != OK:
+		push_warning("No se pudo guardar el perfil local del jugador (código %d)." % error)
 
 
 func end_session(outcome: String = "quit") -> void:
@@ -211,10 +278,131 @@ func _start_local_dashboard() -> void:
 		return
 	var executable := "python" if OS.get_name() == "Windows" else "python3"
 	var arguments := PackedStringArray([server, "--port", str(dashboard_port), "--spool-dir", _spool_directory()])
+	if OS.get_name() == "Windows":
+		var launcher := ProjectSettings.globalize_path("res://telemetry/start_dashboard.ps1")
+		if FileAccess.file_exists(launcher):
+			executable = "powershell.exe"
+			arguments = PackedStringArray([
+				"-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+				"-File", launcher, "-Port", str(dashboard_port),
+				"-SpoolDir", _spool_directory(), "-ServerPath", server,
+			])
 	var pid := OS.create_process(executable, arguments)
 	_web_started = pid > 0
 	if pid <= 0:
 		push_warning("El diario de partida está guardado. Para consultar SQLite ejecuta: python3 telemetry/server.py")
+
+
+func _upload_pending_logs() -> void:
+	if not enabled or _upload_in_flight:
+		return
+	var endpoint := _remote_endpoint()
+	var publishable_key := _remote_key()
+	if endpoint.is_empty() or publishable_key.is_empty():
+		return
+	if not endpoint.begins_with("https://"):
+		push_warning("La URL de ingesta remota debe usar HTTPS. El diario local sigue guardándose.")
+		return
+	var spool_dir := _spool_directory()
+	var files := DirAccess.get_files_at(spool_dir)
+	files.sort()
+	var events: Array[Dictionary] = []
+	var offsets_after_success: Dictionary = {}
+	for filename in files:
+		if not filename.ends_with(".jsonl"):
+			continue
+		var full_path := spool_dir.path_join(filename)
+		var file := FileAccess.open(full_path, FileAccess.READ)
+		if file == null:
+			continue
+		var length := file.get_length()
+		var offset := int(_upload_offsets.get(filename, 0))
+		if length < offset:
+			offset = 0
+		file.seek(offset)
+		var consumed_offset := offset
+		while file.get_position() < length and events.size() < remote_batch_size:
+			var line := file.get_line()
+			var line_end := file.get_position()
+			if line_end <= consumed_offset:
+				break
+			consumed_offset = line_end
+			if line.strip_edges().is_empty():
+				continue
+			var parsed: Variant = JSON.parse_string(line)
+			if parsed is Dictionary:
+				events.append(parsed)
+		file.close()
+		if consumed_offset > offset:
+			offsets_after_success[filename] = consumed_offset
+		if events.size() >= remote_batch_size:
+			break
+	if events.is_empty():
+		# Avanza sobre líneas vacías/corruptas para no bloquear la cola local.
+		if not offsets_after_success.is_empty():
+			_commit_upload_offsets(offsets_after_success)
+		return
+	_pending_upload_offsets = offsets_after_success
+	var body := JSON.stringify({"events": events})
+	var headers := PackedStringArray([
+		"Content-Type: application/json",
+		"apikey: %s" % publishable_key,
+	])
+	var error := _upload_request.request(endpoint, headers, HTTPClient.METHOD_POST, body)
+	if error != OK:
+		_pending_upload_offsets.clear()
+		push_warning("No se pudo iniciar la sincronización de telemetría (código %d). Se reintentará; el diario local está intacto." % error)
+		return
+	_upload_in_flight = true
+
+
+func _on_upload_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+	_upload_in_flight = false
+	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+		_commit_upload_offsets(_pending_upload_offsets)
+	else:
+		push_warning("La telemetría remota no respondió correctamente (HTTP %d). Se reintentará y el diario local permanece guardado." % response_code)
+	_pending_upload_offsets.clear()
+
+
+func _remote_endpoint() -> String:
+	var environment_value := OS.get_environment("RESONANCE_SUPABASE_FUNCTION_URL")
+	return environment_value if not environment_value.is_empty() else remote_ingest_url.strip_edges()
+
+
+func _remote_key() -> String:
+	var environment_value := OS.get_environment("RESONANCE_SUPABASE_PUBLISHABLE_KEY")
+	return environment_value if not environment_value.is_empty() else remote_publishable_key.strip_edges()
+
+
+func _upload_state_path() -> String:
+	return _spool_directory().path_join("remote_upload_offsets.json")
+
+
+func _load_upload_offsets() -> void:
+	var path := _upload_state_path()
+	if not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is Dictionary:
+		_upload_offsets = parsed
+
+
+func _commit_upload_offsets(offsets: Dictionary) -> void:
+	for filename in offsets:
+		_upload_offsets[filename] = int(offsets[filename])
+	var directory := _spool_directory()
+	DirAccess.make_dir_recursive_absolute(directory)
+	var file := FileAccess.open(_upload_state_path(), FileAccess.WRITE)
+	if file == null:
+		push_warning("No se pudo guardar el cursor de sincronización. Los eventos pueden volver a enviarse, pero el servidor elimina duplicados por event_id.")
+		return
+	file.store_string(JSON.stringify(_upload_offsets))
+	file.close()
 
 
 func _map_geometry(scene: Node) -> Dictionary:

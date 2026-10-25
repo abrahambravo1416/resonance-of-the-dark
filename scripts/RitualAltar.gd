@@ -45,6 +45,11 @@ func activate() -> bool:
 	return true
 
 
+func restore_lit_state(lit: bool) -> void:
+	is_lit = lit
+	_sync_light_state()
+
+
 func _configure_ritual_audio() -> void:
 	ritual_audio_player = get_node_or_null("RitualIgniteAudio") as AudioStreamPlayer3D
 	if ritual_audio_player == null:

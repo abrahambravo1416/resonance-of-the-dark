@@ -1,6 +1,10 @@
 # Archivo local de partidas
 
-El juego conserva un diario por sesión y este servicio lo importa a **SQLite**. La web muestra las partidas reales, sus acciones y el recorrido del jugador sobre el plano X/Z del nivel. No se necesitan MySQL, paquetes de Python, una cuenta ni conexión a internet.
+Para guardar partidas de todas las instalaciones en una base central Supabase, sigue [`SUPABASE_SETUP.md`](SUPABASE_SETUP.md). El modo local descrito abajo se mantiene como respaldo.
+
+Para que integrantes del equipo consulten el mismo archivo desde internet, la guía de Supabase también incluye el despliegue de la web compartida. Cada lector debe iniciar sesión con su cuenta del juego y estar autorizado por un administrador; la web no expone la clave secreta ni permite leer el archivo a cualquier jugador.
+
+El juego conserva un diario por sesión y este servicio lo importa a **SQLite**. La web muestra las partidas reales, sus acciones y el recorrido del jugador sobre el plano X/Z del nivel. El panel local no necesita MySQL, paquetes de Python, una cuenta ni conexión a internet; las cuentas son opcionales y se usan para guardar campañas en la nube.
 
 ## Abrir la página
 
@@ -48,7 +52,7 @@ El código, la página y el esquema están en el repositorio. La base y los diar
 
 El juego escribe y vacía el diario a disco después de cada evento. No necesita que la web esté abierta. El importador revisa los archivos cada segundo y antes de una consulta; importa cada `event_id` una sola vez. Si la última línea aún se está escribiendo, espera hasta recibir su salto de línea. Registros inválidos se cuentan y se omiten sin bloquear los demás. Los archivos JSONL deben tratarse como diarios de solo anexado.
 
-La base guarda **el historial para consulta**, no una partida guardada para reanudar el estado del juego.
+Las tablas de telemetría (`game_sessions`, `game_events`) guardan **el historial para consulta**, no una partida guardada para reanudar el estado del juego. El progreso de las cuentas y sus tres espacios se conserva por separado en `public.game_account_saves`, mediante IDs y contraseñas validados en una Edge Function.
 
 En una exportación del juego, Godot puede guardar el diario en `user://telemetry/spool`. Para consultar esa carpeta desde este proyecto:
 
@@ -68,7 +72,7 @@ Cada línea JSONL tiene esta forma (descripción del contrato; no se inserta en 
 {"event_id":"sesion:1","session_id":"sesion","seq":1,"kind":"position_sample","ts":1750000000.5,"elapsed":2.5,"level":1,"position":{"x":4.2,"y":0.0,"z":8.0},"data":{"attempt":1}}
 ```
 
-`position` es opcional. `session_started.data` puede incluir `player_name` y `game_version`; `session_ended.data` incluye `outcome`. `level_started.data` incluye `title`, `scene`, `map_bounds` y `map_geometry`. Todos los eventos pueden incluir `data.attempt` para distinguir reinicios del mismo nivel.
+`position` es opcional. `session_started.data` puede incluir el `player_id` seudónimo de la instalación, el nombre visible del jugador y `game_version`; `session_ended.data` incluye `outcome`. `level_started.data` incluye `title`, `scene`, `map_bounds` y `map_geometry`. Todos los eventos pueden incluir `data.attempt` para distinguir reinicios del mismo nivel. El perfil se guarda en `user://player_profile.cfg`; borrar ese archivo genera una identidad nueva.
 
 - `enemy_position_sample`: posición global, `enemy_id` (ruta relativa al nivel), `enemy` (nombre), `state` y `yaw`. Se guarda cada 0,5 segundos por defecto, independientemente del movimiento del jugador. `enemy_removed` termina la pista cuando el nodo desaparece.
 - `position_sample`: además de posición, incluye `hidden`, `hiding`, `hidden_by_zone`, `cover` y `cover_type`.

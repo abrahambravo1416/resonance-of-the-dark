@@ -5,6 +5,8 @@
 # Datos locales de partidas. El esquema y el servidor sí se versionan.
 /telemetry/data/*
 !/telemetry/data/.gitkeep
+/supabase/.temp/
+/supabase/.env
 __pycache__/
 *.pyc
 .DS_Store

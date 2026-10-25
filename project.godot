@@ -14,12 +14,14 @@ config/name="Resonance of the dark"
 run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+config/windows_native_icon="res://icon.ico"
 
 [autoload]
 
 LevelManager="*res://scenes/ui/LevelManager.tscn"
 GameManager="*res://scripts/GameManager.gd"
 GameplayLog="*res://scenes/systems/GameplayLog.tscn"
+CloudAccount="*res://scripts/CloudAccount.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]

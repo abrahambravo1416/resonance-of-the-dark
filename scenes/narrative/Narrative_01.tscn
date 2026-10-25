@@ -28,7 +28,7 @@ display_name = "La carta de Lucía"
 lines = Array[String](["Lucía escribió: «El primer ritual empieza recordando. Nadie debería desaparecer dos veces.»"])
 
 [node name="SecondMemory" parent="." instance=ExtResource("memory")]
-position = Vector3(21, 0.12, 33)
+position = Vector3(24, 0.12, 33)
 encounter_id = "level_1_memory_b"
 display_name = "El recuerdo del custodio"
 lines = Array[String](["«La última luz no vive en la lámpara. Vive en quien regresa para contar qué ocurrió.» Una inscripción casi borrada."])

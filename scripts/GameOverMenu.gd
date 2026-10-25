@@ -6,6 +6,7 @@ const SFX_MENU_CLICK: AudioStreamWAV = preload("res://audio/Efectos cortos/click
 var _overlay: Control
 var _subtitle: Label
 var _player: Node
+var _checkpoint_queued: bool = false
 
 
 func _ready() -> void:
@@ -46,8 +47,24 @@ func _play_menu_click() -> void:
 
 func _show_game_over() -> void:
 	_overlay.visible = true
+	_queue_campaign_checkpoint()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _queue_campaign_checkpoint() -> void:
+	if _checkpoint_queued:
+		return
+	var game_manager := get_node_or_null("/root/GameManager")
+	var account := get_node_or_null("/root/CloudAccount")
+	if game_manager == null or account == null or int(game_manager.get("active_save_slot")) < 1:
+		return
+	var level := 1
+	if _player != null and is_instance_valid(_player):
+		level = clampi(int(_player.get("current_level_number")), 1, 4)
+	var snapshot: Dictionary = game_manager.call("make_campaign_snapshot", level, false)
+	account.call("queue_checkpoint", level, snapshot)
+	_checkpoint_queued = true
 
 
 func _show_timeout_game_over() -> void:

@@ -224,6 +224,7 @@ func _bind_authored_level() -> void:
 	exit_gate_area.body_entered.connect(_on_exit_gate_crossed)
 	player.connect("cemetery_exit_unlocked", _open_exit_gate)
 	player.call("set_exit_gate_radar_target", exit_gate_assembly, false)
+	_restore_saved_level_progress()
 	level_music_player = get_node_or_null("LevelMusicPlayer") as AudioStreamPlayer
 	pursuit_music_player = get_node_or_null("PursuitMusicPlayer") as AudioStreamPlayer
 	if level_music_player != null:
@@ -247,15 +248,149 @@ func _record_event(kind: String, data: Dictionary = {}, world_position: Variant 
 		logger.record(kind, data, world_position, level_number)
 
 
+func make_campaign_level_progress_snapshot(actor: Node) -> Dictionary:
+	var player_position: Vector3 = (actor as Node3D).global_position if actor is Node3D else Vector3.ZERO
+	var lit_altar_names: Array[String] = []
+	for altar in ritual_shrines:
+		if is_instance_valid(altar) and altar.is_lit:
+			lit_altar_names.append(str(altar.name))
+	var remaining_pumpkin_names: Array[String] = []
+	for pumpkin in active_pumpkins:
+		if is_instance_valid(pumpkin):
+			remaining_pumpkin_names.append(str(pumpkin.name))
+	var collected_item_ids: Array[String] = []
+	var saved_item_ids: Variant = actor.get("collected_item_ids")
+	if saved_item_ids is Array:
+		for item_id in saved_item_ids:
+			collected_item_ids.append(str(item_id))
+	var delivered_relic_indices: Array[int] = []
+	var carried_relic_index: int = -1
+	for relic in absolute_ritual_relics:
+		if not is_instance_valid(relic):
+			continue
+		var relic_index := int(relic.get_meta("relic_index", -1))
+		if bool(relic.get_meta("delivered", false)):
+			delivered_relic_indices.append(relic_index)
+		elif bool(relic.get_meta("carried", false)):
+			carried_relic_index = relic_index
+	var pumpkins_collected := int(actor.get("pumpkins_collected"))
+	var rituals_completed := lit_altar_names.size()
+	var relics_delivered := delivered_relic_indices.size()
+	var required_pumpkins: int = 4 if level_number == 4 else (7 if level_number == 3 else 0)
+	var missions := {
+		"altars": {"lit": rituals_completed, "required": _ritual_altar_count, "done": rituals_completed >= _ritual_altar_count},
+		"escape_unlocked": bool(actor.get("exit_unlocked")),
+	}
+	if level_number >= 3:
+		missions["pumpkins"] = {"completed": pumpkins_collected, "required": required_pumpkins, "done": pumpkins_collected >= required_pumpkins}
+	if level_number == 4:
+		missions["absolute_ritual"] = {"delivered": relics_delivered, "required": _absolute_ritual_relic_count, "done": relics_delivered >= _absolute_ritual_relic_count}
+	return {
+		"level": level_number,
+		"random_seed": random_seed,
+		"player_position": [player_position.x, player_position.y, player_position.z],
+		"health": int(actor.get("current_health")),
+		"items_collected": int(actor.get("items_collected")),
+		"collected_item_ids": collected_item_ids,
+		"pumpkins_collected": pumpkins_collected,
+		"remaining_pumpkins": remaining_pumpkin_names,
+		"lit_altar_names": lit_altar_names,
+		"rituals_completed": rituals_completed,
+		"relics_delivered": relics_delivered,
+		"delivered_relic_indices": delivered_relic_indices,
+		"carried_relic_index": carried_relic_index,
+		"missions": missions,
+	}
+
+
+func _restore_saved_level_progress() -> void:
+	var game_manager := get_node_or_null("/root/GameManager")
+	if game_manager == null or not game_manager.has_method("get_level_progress"):
+		return
+	var progress: Dictionary = game_manager.call("get_level_progress", level_number)
+	if progress.is_empty() or player == null or not is_instance_valid(player):
+		return
+
+	var lit_altar_names: Array = progress.get("lit_altar_names", [])
+	var legacy_altar_count := clampi(int(progress.get("rituals_completed", 0)), 0, ritual_shrines.size())
+	for index in ritual_shrines.size():
+		var altar := ritual_shrines[index]
+		var should_be_lit: bool = lit_altar_names.has(str(altar.name)) or (lit_altar_names.is_empty() and index < legacy_altar_count)
+		altar.restore_lit_state(should_be_lit)
+
+	var remaining_pumpkin_names: Array = progress.get("remaining_pumpkins", [])
+	if not remaining_pumpkin_names.is_empty() or int(progress.get("pumpkins_collected", 0)) == 0:
+		for pumpkin in active_pumpkins.duplicate():
+			if not is_instance_valid(pumpkin):
+				active_pumpkins.erase(pumpkin)
+				continue
+			if remaining_pumpkin_names.has(str(pumpkin.name)):
+				continue
+			active_pumpkins.erase(pumpkin)
+			pumpkin.queue_free()
+	else:
+		var pumpkins_to_remove := mini(int(progress.get("pumpkins_collected", 0)), active_pumpkins.size())
+		for _index in pumpkins_to_remove:
+			var pumpkin: Node = active_pumpkins.pop_front()
+			if is_instance_valid(pumpkin):
+				pumpkin.queue_free()
+
+	var collected_item_ids: Array = progress.get("collected_item_ids", [])
+	if not collected_item_ids.is_empty():
+		for item in items_root.get_children():
+			if item is InteractableItem and collected_item_ids.has(str(item.name)):
+				item.queue_free()
+
+	var delivered_indices: Array = progress.get("delivered_relic_indices", [])
+	if delivered_indices.is_empty():
+		for index in mini(int(progress.get("relics_delivered", 0)), absolute_ritual_relics.size()):
+			delivered_indices.append(index)
+	var delivered_count := 0
+	for relic in absolute_ritual_relics:
+		var relic_index := int(relic.get_meta("relic_index", -1))
+		if not delivered_indices.has(relic_index):
+			continue
+		var side_offset: float = -1.05 if delivered_count == 0 else 1.05
+		relic.reparent(absolute_ritual_relics_root)
+		relic.global_position = absolute_ritual_delivery_position + Vector3(0.25, 0.0, side_offset)
+		relic.set_meta("delivered", true)
+		relic.set_meta("carried", false)
+		delivered_count += 1
+
+	var carried_index := int(progress.get("carried_relic_index", -1))
+	if carried_index >= 0:
+		for relic in absolute_ritual_relics:
+			if int(relic.get_meta("relic_index", -1)) != carried_index or bool(relic.get_meta("delivered", false)):
+				continue
+			relic.set_meta("carried", true)
+			player.call("restore_carried_absolute_ritual_relic", relic)
+			break
+
+	if player.has_method("restore_mission_progress"):
+		player.call("restore_mission_progress", progress)
+	if level_number == 4 and bool(player.get("exit_unlocked")):
+		for enemy_node in enemies:
+			if is_instance_valid(enemy_node):
+				enemy_node.queue_free()
+
+
 func build_map() -> void:
 	_apply_level_profile()
 	_configure_level_music()
+	var game_manager := get_node_or_null("/root/GameManager")
+	if game_manager != null and game_manager.has_method("get_level_progress"):
+		var saved_progress: Dictionary = game_manager.call("get_level_progress", level_number)
+		var saved_seed := int(saved_progress.get("random_seed", 0))
+		if saved_seed != 0:
+			random_seed = saved_seed
 	# Preserve enough map width for the clear spawn radius plus room around it.
 	var minimum_grid_extent: int = player_spawn_clear_radius * 2 + 3
 	grid_size.x = maxi(minimum_grid_extent, grid_size.x)
 	grid_size.y = maxi(minimum_grid_extent, grid_size.y)
 	_player_spawn_cell = Vector2i(grid_size.x / 2, maxi(0, grid_size.y / 2 - 1))
-	_rng.seed = random_seed if random_seed != 0 else int(Time.get_unix_time_from_system() * 1000.0)
+	if random_seed == 0:
+		random_seed = int(Time.get_unix_time_from_system() * 1000.0)
+	_rng.seed = random_seed
 	_autofill_asset_lists()
 	_resolve_level_nodes()
 	_clear_children(environment_root)
@@ -301,6 +436,7 @@ func build_map() -> void:
 	if level_number == 4:
 		spawn_absolute_ritual_relics()
 	generate_patrol_points()
+	_restore_saved_level_progress()
 	if bake_navigation_after_build:
 		bake_navigation()
 	else:

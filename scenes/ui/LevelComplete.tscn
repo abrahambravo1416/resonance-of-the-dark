@@ -1,7 +1,5 @@
 [gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/TransitionSkipInput.gd" id="1_3rktr"]
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_dyb8b"]
 content_margin_left = 28.0
 content_margin_top = 24.0
@@ -79,10 +77,6 @@ corner_radius_bottom_left = 5
 process_mode = 3
 layer = 30
 
-[node name="TransitionSkipInput" type="Node" parent="." unique_id=410111801]
-process_mode = 3
-script = ExtResource("1_3rktr")
-
 [node name="EscapeTransitionScreen" type="Control" parent="." unique_id=1567707113]
 layout_mode = 3
 anchors_preset = 15
@@ -94,22 +88,6 @@ layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 color = Color(0.015, 0.01, 0.025, 0.9)
-
-[node name="SkipHint" type="Label" parent="EscapeTransitionScreen" unique_id=1792154784]
-layout_mode = 0
-anchor_left = 1.0
-anchor_top = 1.0
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = -360.0
-offset_top = -48.0
-offset_right = -28.0
-offset_bottom = -16.0
-theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
-theme_override_font_sizes/font_size = 14
-text = "Presiona ENTER para saltar"
-horizontal_alignment = 2
-vertical_alignment = 1
 
 [node name="EscapePanel" type="PanelContainer" parent="EscapeTransitionScreen" unique_id=1716561185]
 layout_mode = 0

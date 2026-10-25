@@ -105,6 +105,7 @@ var is_running: bool = false
 var is_crouching: bool = false
 var noise_level: float = 0.0
 var items_collected: int = 0
+var collected_item_ids: Array[String] = []
 var rituals_completed: int = 0
 var pumpkins_collected: int = 0
 var absolute_ritual_relics_delivered: int = 0
@@ -192,6 +193,7 @@ var _exit_gate_nearby: bool = false
 var _has_escaped: bool = false
 var _purification_sequence_active: bool = false
 var _purification_sequence_finished: bool = false
+var _campaign_autosave_elapsed: float = 0.0
 var _victory_screen_layer: CanvasLayer
 var _level_score_seconds: int = 0
 var _level_score_points: int = 0
@@ -245,6 +247,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_campaign_autosave_elapsed += delta
+	if _campaign_autosave_elapsed >= 20.0:
+		_persist_campaign_level_progress()
 	if shake_strength > 0.0:
 		shake_strength = move_toward(shake_strength, 0.0, shake_decay * delta)
 		_screenshake_offset = Vector2(
@@ -543,6 +548,8 @@ func configure_level(level_number: int, ritual_count: int, absolute_relic_count:
 	current_level_number = clampi(level_number, 1, 4)
 	total_rituals_required = maxi(1, ritual_count)
 	total_absolute_ritual_relics = maxi(0, absolute_relic_count) if current_level_number == 4 else 0
+	items_collected = 0
+	collected_item_ids.clear()
 	rituals_completed = 0
 	pumpkins_collected = 0
 	absolute_ritual_relics_delivered = 0
@@ -556,6 +563,34 @@ func configure_level(level_number: int, ritual_count: int, absolute_relic_count:
 	if _altar_progress_label != null:
 		_altar_progress_label.visible = true
 	update_objective_ui()
+
+
+func restore_mission_progress(progress: Dictionary) -> void:
+	items_collected = maxi(0, int(progress.get("items_collected", 0)))
+	collected_item_ids.clear()
+	var saved_item_ids: Variant = progress.get("collected_item_ids", [])
+	if saved_item_ids is Array:
+		for item_id in saved_item_ids:
+			collected_item_ids.append(str(item_id))
+	pumpkins_collected = clampi(int(progress.get("pumpkins_collected", 0)), 0, _pumpkin_requirement_for_current_level())
+	rituals_completed = clampi(int(progress.get("rituals_completed", 0)), 0, total_rituals_required)
+	absolute_ritual_relics_delivered = clampi(int(progress.get("relics_delivered", 0)), 0, total_absolute_ritual_relics)
+	current_health = clampi(int(progress.get("health", current_health)), 1, max_health)
+	var saved_position: Variant = progress.get("player_position", [])
+	if saved_position is Array and saved_position.size() >= 3:
+		global_position = Vector3(float(saved_position[0]), float(saved_position[1]), float(saved_position[2]))
+		velocity = Vector3.ZERO
+	var pumpkins_complete: bool = current_level_number < 3 or pumpkins_collected >= _pumpkin_requirement_for_current_level()
+	var relics_complete: bool = current_level_number != 4 or absolute_ritual_relics_delivered >= total_absolute_ritual_relics
+	exit_unlocked = rituals_completed >= total_rituals_required and pumpkins_complete and relics_complete
+	if current_level_number == 4 and exit_unlocked:
+		_purification_sequence_active = false
+		_purification_sequence_finished = true
+		controls_frozen = false
+	update_health_ui()
+	_update_ritual_counter_ui()
+	if exit_unlocked:
+		cemetery_exit_unlocked.emit()
 
 
 func show_level_intro(level_number: int) -> void:
@@ -577,7 +612,6 @@ func show_level_intro(level_number: int) -> void:
 	_level_2_intro_timer = _level_2_intro_layer.get_node("Level2IntroCountdownTimer") as Timer
 	_level_2_intro_countdown_label.text = "El juego comienza en: %d..." % countdown_time
 	_level_2_intro_timer.timeout.connect(_on_level_2_intro_countdown)
-	_level_2_intro_layer.get_node("Level2Announcement/Content/SkipMenuButton").pressed.connect(_on_transition_skip_requested)
 	_level_2_intro_timer.start()
 	_log("intro_shown")
 
@@ -909,8 +943,6 @@ func _on_transition_skip_requested() -> void:
 	if _level_2_intro_layer != null and is_instance_valid(_level_2_intro_layer):
 		_log("intro_skipped", {"source": "button_or_enter"})
 		_finish_level_intro()
-	elif _victory_screen_layer != null and is_instance_valid(_victory_screen_layer) and current_level_number < 4:
-		_continue_to_next_level()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -961,10 +993,19 @@ func _try_interact_absolute_ritual_relic() -> bool:
 	var interacted: bool = bool(level_builder.call("try_interact_absolute_ritual_relic", self))
 	if interacted:
 		play_sound_effect(SFX_HEALTH_SKULL_PICKUP, false, 0.65)
+		_persist_campaign_level_progress()
 	return interacted
 
 
 func carry_absolute_ritual_relic(relic: Node3D) -> bool:
+	return _carry_absolute_ritual_relic(relic, true)
+
+
+func restore_carried_absolute_ritual_relic(relic: Node3D) -> bool:
+	return _carry_absolute_ritual_relic(relic, false)
+
+
+func _carry_absolute_ritual_relic(relic: Node3D, record_pickup: bool) -> bool:
 	if current_level_number != 4 or is_carrying_absolute_ritual_relic or relic == null:
 		return false
 	var carry_anchor := get_node_or_null("AbsoluteRitualCarryAnchor") as Node3D
@@ -975,7 +1016,8 @@ func carry_absolute_ritual_relic(relic: Node3D) -> bool:
 	relic.rotation = Vector3.ZERO
 	carried_absolute_ritual_relic = relic
 	is_carrying_absolute_ritual_relic = true
-	_log("relic_picked_up", {"object": str(relic.name)})
+	if record_pickup:
+		_log("relic_picked_up", {"object": str(relic.name)})
 	is_running = false
 	_update_crouch_state(false)
 	_set_carried_relic_visible(not is_hidden)
@@ -999,6 +1041,7 @@ func set_absolute_ritual_relic_progress(delivered: int, required: int) -> void:
 	total_absolute_ritual_relics = maxi(0, required)
 	absolute_ritual_relics_delivered = clampi(delivered, 0, total_absolute_ritual_relics)
 	_update_ritual_counter_ui()
+	_persist_campaign_level_progress()
 
 
 func _interact_with_collectible_target() -> void:
@@ -1018,6 +1061,7 @@ func collect_pumpkin() -> void:
 		_log("mission_completed", {"mission": "pumpkins"})
 	play_sound_effect(SFX_PUMPKIN)
 	_update_ritual_counter_ui()
+	_persist_campaign_level_progress()
 
 
 func _pumpkin_requirement_for_current_level() -> int:
@@ -1312,6 +1356,7 @@ func _try_light_nearby_altar() -> void:
 		else:
 			_update_ritual_counter_ui()
 			cemetery_exit_unlocked.emit()
+	_persist_campaign_level_progress()
 
 
 func _start_final_purification_sequence() -> void:
@@ -1579,6 +1624,10 @@ func _show_final_victory_screen() -> void:
 	if logger != null:
 		logger.call("end_session", "victory")
 	_is_new_high_score = bool(get_node("/root/GameManager").call("check_and_update_high_score"))
+	var game_manager := get_node("/root/GameManager")
+	if int(game_manager.get("active_save_slot")) > 0:
+		var snapshot: Dictionary = game_manager.call("make_campaign_snapshot", 4, true)
+		get_node("/root/CloudAccount").call("queue_checkpoint", 4, snapshot)
 	_show_escape_screen(
 		"¡EL RITUAL ABSOLUTO SE HA CUMPLIDO!",
 		"Has profanado las tumbas, desafiado al enjambre y escapado con vida.",
@@ -1595,7 +1644,6 @@ func _show_escape_screen(title_text: String, description_text: String, show_cont
 	layout.get_node("EscapeTitle").text = title_text
 	layout.get_node("EscapeDescription").text = description_text
 	if show_continue:
-		_add_transition_skip_input(_victory_screen_layer)
 		layout.get_node("Summary1").text = "Tiempo restante: %d seg" % _level_score_seconds
 		layout.get_node("Summary2").text = "Puntos ganados: +%d" % _level_score_points
 		layout.get_node("Summary3").text = "Puntuación Total: %d" % get_node("/root/GameManager").get("total_score")
@@ -1620,13 +1668,26 @@ func _play_menu_click() -> void:
 
 
 func _continue_to_next_level() -> void:
+	var next_level := current_level_number + 1
+	var game_manager := get_node("/root/GameManager")
+	var save_slot := int(game_manager.get("active_save_slot"))
+	if save_slot > 0:
+		var continue_button := _victory_screen_layer.get_node("EscapeTransitionScreen/EscapePanel/Content/ContinueButton") as Button
+		continue_button.disabled = true
+		continue_button.text = "GUARDANDO…"
+		var snapshot: Dictionary = game_manager.call("make_campaign_snapshot", next_level, false)
+		var account := get_node("/root/CloudAccount") as CloudAccountManager
+		var save_result: Dictionary = await account.save_checkpoint(next_level, snapshot)
+		if not save_result.get("ok", false):
+			continue_button.disabled = false
+			continue_button.text = "REINTENTAR GUARDADO"
+			push_warning(str(save_result.get("error", "No se pudo guardar el progreso.")))
+			return
 	get_tree().paused = false
-	var next_level_path := "res://scenes/Level_%02d.tscn" % (current_level_number + 1)
+	var next_level_path := "res://scenes/Level_%02d.tscn" % next_level
 	var error := get_tree().change_scene_to_file(next_level_path)
 	if error != OK:
-		push_error("No se pudo cargar el Nivel %d (error %d)." % [current_level_number + 1, error])
-
-
+		push_error("No se pudo cargar el Nivel %d (error %d)." % [next_level, error])
 func _return_to_main_menu() -> void:
 	var logger := get_node_or_null("/root/GameplayLog")
 	if logger != null:
@@ -1896,10 +1957,28 @@ func _finish_cover_transition() -> void:
 		_update_interaction_prompt()
 
 
-func collect_item(item_name: String) -> void:
+func collect_item(item_name: String, item_id: String = "") -> void:
 	items_collected += 1
+	if not item_id.is_empty() and not collected_item_ids.has(item_id):
+		collected_item_ids.append(item_id)
 	_log("item_collected", {"item": item_name, "collected": items_collected})
 	item_collected.emit(item_name, items_collected, total_items_needed)
+	_persist_campaign_level_progress()
+
+
+func _persist_campaign_level_progress() -> void:
+	_campaign_autosave_elapsed = 0.0
+	var game_manager := get_node_or_null("/root/GameManager")
+	var account := get_node_or_null("/root/CloudAccount")
+	if game_manager == null or account == null or int(game_manager.get("active_save_slot")) < 1:
+		return
+	var level_builder := get_parent()
+	if level_builder == null or not level_builder.has_method("make_campaign_level_progress_snapshot"):
+		return
+	var progress: Dictionary = level_builder.call("make_campaign_level_progress_snapshot", self)
+	game_manager.call("set_level_progress", current_level_number, progress)
+	var snapshot: Dictionary = game_manager.call("make_campaign_snapshot", current_level_number, false)
+	account.call("queue_checkpoint", current_level_number, snapshot)
 
 
 func _hiding_state_payload() -> Dictionary:

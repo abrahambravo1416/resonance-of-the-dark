@@ -27,7 +27,7 @@ func interact(player: PlayerController) -> void:
 	if _collected or not is_instance_valid(player) or not player.has_method("collect_item"):
 		return
 	_collected = true
-	player.collect_item(item_name)
+	player.collect_item(item_name, str(name))
 	_play_feedback()
 	queue_free()
 

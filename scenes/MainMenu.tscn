@@ -146,9 +146,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -260.0
-offset_top = -320.0
+offset_top = -280.0
 offset_right = 260.0
-offset_bottom = 320.0
+offset_bottom = 280.0
 theme_override_constants/separation = 14
 alignment = 1
 
@@ -184,12 +184,6 @@ horizontal_alignment = 1
 custom_minimum_size = Vector2(0, 8)
 layout_mode = 2
 
-[node name="PlayerAlias" type="LineEdit" parent="MenuLayout" unique_id=609039099]
-custom_minimum_size = Vector2(0, 36)
-layout_mode = 2
-placeholder_text = "Tu nombre (opcional)"
-max_length = 48
-
 [node name="PlayButton" type="Button" parent="MenuLayout" unique_id=1850486039]
 custom_minimum_size = Vector2(280, 54)
 layout_mode = 2
@@ -200,20 +194,7 @@ theme_override_font_sizes/font_size = 18
 theme_override_styles/normal = SubResource("StyleBoxFlat_kncl5")
 theme_override_styles/pressed = SubResource("StyleBoxFlat_clp4r")
 theme_override_styles/hover = SubResource("StyleBoxFlat_clp4r")
-text = "JUGAR"
-
-[node name="SkipMenuButton" type="Button" parent="MenuLayout" unique_id=1930149987]
-custom_minimum_size = Vector2(280, 54)
-layout_mode = 2
-tooltip_text = "Comenzar con las mismas misiones, sin esperar la introducción."
-theme_override_colors/font_color = Color(1, 0.9411765, 0.83137256, 1)
-theme_override_colors/font_pressed_color = Color(0.9490196, 0.8352941, 0.627451, 1)
-theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 18
-theme_override_styles/normal = SubResource("StyleBoxFlat_kncl5")
-theme_override_styles/pressed = SubResource("StyleBoxFlat_clp4r")
-theme_override_styles/hover = SubResource("StyleBoxFlat_clp4r")
-text = "SALTAR MENÚ"
+text = "JUGAR COMO INVITADO"
 
 [node name="ExitButton" type="Button" parent="MenuLayout" unique_id=2102481485]
 custom_minimum_size = Vector2(280, 54)
@@ -229,23 +210,16 @@ text = "SALIR"
 
 [node name="@Label@8" type="Label" parent="MenuLayout" unique_id=980028974]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.45490196, 0.41960785, 0.4862745, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.76, 0.72, 0.80, 1)
+theme_override_font_sizes/font_size = 13
 text = "WASD MOVER  ·  SHIFT CORRER  ·  CTRL AGACHAR  ·  E/Q INTERACTUAR"
 horizontal_alignment = 1
 
 [node name="ScorePenaltyHint" type="Label" parent="MenuLayout" unique_id=159160784]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.45490196, 0.41960785, 0.4862745, 1)
-theme_override_font_sizes/font_size = 11
-text = "GAME OVER = -50 en puntuación final"
-horizontal_alignment = 1
-
-[node name="LocalLogNotice" type="Label" parent="MenuLayout" unique_id=1562326377]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.6627451, 0.6117647, 0.6862745, 1)
+theme_override_colors/font_color = Color(0.70, 0.66, 0.75, 1)
 theme_override_font_sizes/font_size = 12
-text = "Registro local de partidas · consulta en localhost:8765"
+text = "GAME OVER = -50 en puntuación final"
 horizontal_alignment = 1
 
 [node name="MenuClick" type="AudioStreamPlayer" parent="." unique_id=1901737542]

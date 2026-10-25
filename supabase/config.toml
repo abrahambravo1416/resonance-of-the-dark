@@ -1,0 +1,12 @@
+# En este endpoint el SDK valida la clave publishable dentro de la función.
+# La pasarela no debe tratar sb_publishable_* como si fuera un JWT.
+project_id = "resonance-of-the-dark"
+
+[functions.ingest-gameplay]
+verify_jwt = false
+
+[functions.account-api]
+verify_jwt = false
+
+[functions.team-dashboard]
+verify_jwt = false

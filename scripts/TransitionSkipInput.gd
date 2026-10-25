@@ -6,6 +6,13 @@ signal skip_requested
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process_input(true)
+	var skip_button := get_parent().get_node_or_null("Level2Announcement/Content/SkipMenuButton") as Button
+	if skip_button != null:
+		skip_button.pressed.connect(_emit_skip_requested)
+
+
+func _emit_skip_requested() -> void:
+	skip_requested.emit()
 
 
 func _input(event: InputEvent) -> void:

@@ -8,3 +8,5 @@ script = ExtResource("1")
 sample_interval = 0.5
 minimum_sample_distance = 0.12
 launch_local_dashboard = true
+remote_ingest_url = "https://nqcabupndnyvlhgvenwq.supabase.co/functions/v1/ingest-gameplay"
+remote_publishable_key = "sb_publishable_CsgNW6g4UMeblaOZbuUAew_ztRBQJAQ"

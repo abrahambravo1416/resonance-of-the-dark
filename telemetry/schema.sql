@@ -2,6 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
+    player_id TEXT,
     player_name TEXT NOT NULL DEFAULT '',
     game_version TEXT NOT NULL DEFAULT '',
     started_at REAL NOT NULL,
