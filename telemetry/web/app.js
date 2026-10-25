@@ -1,6 +1,8 @@
 "use strict";
 
 const $ = id => document.getElementById(id);
+const appConfig = window.RESONANCE_ARCHIVE_CONFIG || {mode:"local"};
+const teamMode = appConfig.mode === "team";
 const Replay = ResonanceReplay;
 const sampleKinds = Replay.samples;
 const playerSampleKinds = Replay.playerSamples;
@@ -31,6 +33,7 @@ const labels = {
 };
 const outcomeNames = {quit:"Salida del juego",finished:"Partida terminada",completed:"Completada",game_over:"Fin de la partida",window_closed:"Ventana cerrada",application_closed:"Juego cerrado",returned_to_menu:"Regresó al menú",new_run:"Inició otra partida",verification_complete:"Verificación terminada"};
 const state = {sessions:[], selected:null, record:null, cursor:0, followEnd:true, playing:false, shown:100, zoom:1, pan:{x:0,y:0}, dragging:null, bounds:null, refreshBusy:false};
+let accessToken = teamMode ? sessionStorage.getItem("resonance-team-dashboard-token") || "" : "";
 const node = (tag, className, text) => {const el = document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
 const label = kind => labels[kind] || kind.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
 const date = stamp => new Date(stamp*1000);
@@ -39,33 +42,78 @@ const formatHour = stamp => date(stamp).toLocaleTimeString("es-MX", {hour:"2-dig
 function clock(seconds){const n=Math.max(0,Math.floor(seconds));return n>=3600?`${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`:`${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;}
 function duration(seconds){return seconds>=3600?`${Math.floor(seconds/3600)} h ${Math.floor(seconds/60)%60} min`:seconds>=60?`${Math.floor(seconds/60)} min ${Math.floor(seconds)%60} s`:`${Math.floor(seconds)} s`;}
 const getAttempt = event => String(event.data?.attempt ?? 0);
-function setConnection(online){$("connection").classList.toggle("offline",!online);$("connection").replaceChildren(node("i"),document.createTextNode(online?"Archivo conectado":"Sin conexión"));}
-async function api(path){const response=await fetch(path,{cache:"no-store"});if(!response.ok)throw Error("No se pudo leer el archivo de partidas. Comprueba que el servidor siga abierto.");return response.json();}
+function setConnection(online,source="Archivo"){$("connection").classList.toggle("offline",!online);$("connection").replaceChildren(node("i"),document.createTextNode(online?`${source} conectado`:"Sin conexión"));}
+async function readResponse(response){let body={};try{body=await response.json();}catch{}if(!response.ok){const error=Error(body.error||"No se pudo consultar el archivo de partidas.");error.status=response.status;throw error;}return body;}
+async function api(action,payload={}){
+  if(!teamMode){
+    const paths={health:"/api/health",sessions:"/api/sessions"};
+    const path=action==="session"?`/api/sessions/${encodeURIComponent(payload.session_id)}`:paths[action];
+    if(!path)throw Error("Acción de archivo desconocida.");
+    return readResponse(await fetch(path,{cache:"no-store"}));
+  }
+  if(!accessToken)throw Object.assign(Error("Inicia sesión para consultar el archivo."),{status:401});
+  const response=await fetch(appConfig.dashboardApiUrl,{method:"POST",cache:"no-store",headers:{"Content-Type":"application/json","apikey":appConfig.publishableKey},body:JSON.stringify({action,session_token:accessToken,...payload})});
+  return readResponse(response);
+}
+async function accountRequest(body,token=""){
+  const headers={"Content-Type":"application/json","apikey":appConfig.publishableKey};
+  return readResponse(await fetch(appConfig.accountApiUrl,{method:"POST",cache:"no-store",headers,body:JSON.stringify(token?{...body,session_token:token}:body)}));
+}
+function showLogin(message=""){
+  $("auth-screen").hidden=!teamMode;
+  $("workspace").hidden=true;
+  $("logout").hidden=true;
+  $("refresh").hidden=teamMode;
+  if(teamMode){
+    $("connection").classList.remove("offline");
+    $("connection").replaceChildren(node("i"),document.createTextNode("Acceso del equipo"));
+  }
+  $("login-error").textContent=message;
+  $("login-error").hidden=!message;
+}
+function showWorkspace(){
+  $("auth-screen").hidden=true;
+  $("workspace").hidden=false;
+  $("logout").hidden=!teamMode;
+  $("refresh").hidden=false;
+}
+function endTeamSession(){accessToken="";sessionStorage.removeItem("resonance-team-dashboard-token");}
 function showError(message){$("error").textContent=message;$("error").hidden=!message;}
 async function refresh(){
+  if(teamMode&&!accessToken)return;
   if(state.refreshBusy)return;
   state.refreshBusy=true;
   try {
-    const [result,health]=await Promise.all([api("/api/sessions"),api("/api/health")]);
+    const [result,health]=await Promise.all([api("sessions"),api("health")]);
     state.sessions=result.sessions;
-    setConnection(health.ok);
+    setConnection(health.ok,teamMode?"Archivo del equipo":health.database==="Supabase Postgres"?"Supabase central":"Archivo local");
+    const shared=health.database==="Supabase Postgres";
+    $("archive-note").replaceChildren(node("span","tiny-dot"),document.createTextNode(shared?" Archivo central · Supabase":" Archivo local · SQLite"),node("span",null,shared?"Las partidas del equipo se actualizan automáticamente.":"Los registros se actualizan cada 5 segundos."));
+    $("footer-source").textContent=shared?"Archivo central del equipo · Supabase":"Datos de esta máquina · No requiere conexión a internet";
     showError(health.rejected_lines?`${health.rejected_lines} línea(s) del registro no pudieron importarse. Los eventos válidos siguen disponibles.`:health.ingestion_error?"La importación encontró un problema. Revisa la terminal del servidor.":"");
     if(!state.selected && state.sessions.length)state.selected=state.sessions[0].session_id;
     renderSessions();
     if(state.selected)await loadSelected(false);
     else {$("welcome").hidden=false;$("detail").hidden=true;}
-  } catch(error){setConnection(false);showError(error.message);}
+  } catch(error){
+    setConnection(false);
+    if(teamMode&&(error.status===401||error.status===403)){endTeamSession();showLogin(error.message);return;}
+    showError(error.message);
+  }
   finally{state.refreshBusy=false;}
 }
 function renderSessions(){
   $("session-count").textContent=String(state.sessions.length);
+  const knownPlayers=new Set(state.sessions.map(item=>item.player_id).filter(Boolean));
+  $("player-count").textContent=`${knownPlayers.size} ${knownPlayers.size===1?"instalación reconocida":"instalaciones reconocidas"}`;
   const query=$("search").value.trim().toLocaleLowerCase();
-  const sessions=state.sessions.filter(item=>`${item.player_name} ${item.session_id} ${formatDate(item.started_at)}`.toLocaleLowerCase().includes(query));
+  const sessions=state.sessions.filter(item=>`${item.player_name} ${item.player_id||""} ${item.session_id} ${formatDate(item.started_at)}`.toLocaleLowerCase().includes(query));
   const fragment=document.createDocumentFragment();
   for(const session of sessions){
     const button=node("button",`session-card${session.session_id===state.selected?" selected":""}`);button.type="button";button.setAttribute("aria-pressed",String(session.session_id===state.selected));
     const top=node("span","card-top");top.append(node("span",null,formatDate(session.started_at)),node("span",`status-dot ${session.status}`,session.status==="active"?"● En curso":session.status==="finished"?"Finalizada":"Sin actividad"));
-    button.append(top,node("strong",null,session.player_name||"Explorador"),node("small",null,`${formatHour(session.started_at)} · ${duration(session.duration)} · ${session.action_count} acciones`));
+    const playerTag=session.player_id?`Jugador ${session.player_id.slice(0,8)}`:"Jugador antiguo";
+    button.append(top,node("strong",null,session.player_name||"Explorador"),node("small",null,`${playerTag} · ${formatHour(session.started_at)} · ${duration(session.duration)} · ${session.action_count} acciones`));
     button.addEventListener("click",async()=>{state.selected=session.session_id;state.record=null;state.playing=false;state.followEnd=true;state.shown=100;renderSessions();try{await loadSelected(true);}catch(error){showError(error.message);}});
     fragment.append(button);
   }
@@ -80,7 +128,7 @@ function fillSelect(element,entries,emptyLabel,preferred){
 }
 async function loadSelected(reset){
   const selected=state.selected;
-  const result=await api(`/api/sessions/${encodeURIComponent(selected)}`);
+  const result=await api("session",{session_id:selected});
   if(selected!==state.selected)return;
   const first=state.record===null || reset;
   const unchanged=!first && state.record.session.event_count===result.session.event_count && state.record.session.last_seen===result.session.last_seen && state.record.session.status===result.session.status;
@@ -91,12 +139,14 @@ async function loadSelected(reset){
   const s=result.session;
   $("session-date").textContent=`PARTIDA DEL ${formatDate(s.started_at).toLocaleUpperCase()} · ${formatHour(s.started_at)}`;
   $("session-title").textContent=s.player_name||"Explorador";
-  $("session-meta").textContent=`Último registro: ${formatHour(s.last_seen)} · ID ${s.session_id}`;
+  const matchingSessions=s.player_id?state.sessions.filter(item=>item.player_id===s.player_id).length:1;
+  const playerMeta=s.player_id?`ID de instalación: ${s.player_id} · ${matchingSessions} ${matchingSessions===1?"partida":"partidas"} con este ID`:"Identidad de instalación no disponible en esta partida";
+  $("session-meta").textContent=`${playerMeta} · Último registro: ${formatHour(s.last_seen)} · Partida ${s.session_id}`;
   $("session-status").textContent=s.status==="active"?"● En curso":s.status==="finished"?(outcomeNames[s.outcome]||"Finalizada"):"Sin actividad reciente";
   $("session-status").className=`badge ${s.status}`;
   $("duration").textContent=duration(s.duration);$("distance").textContent=`${s.distance.toLocaleString("es-MX",{maximumFractionDigits:1})} m`;
   $("actions").textContent=s.action_count.toLocaleString("es-MX");$("levels").textContent=String(s.level_count);
-  $("export").href=`/api/export/${encodeURIComponent(s.session_id)}?format=csv`;
+  $("export").href=teamMode?"#":`/api/export/${encodeURIComponent(s.session_id)}?format=csv`;
   const levels=[...new Set(result.events.map(event=>event.level).filter(level=>level>0))].sort((a,b)=>a-b);
   fillSelect($("level"),levels.map(level=>[level,`Nivel ${level}`]),"Todos los niveles",first?"all":undefined);
   fillAttempts(first);
@@ -223,7 +273,64 @@ function renderHiddenIntervals(intervals){
   $("hide-periods").setAttribute("aria-label",intervals.length?intervals.map(interval=>`Oculto de ${clock(interval.start)} a ${clock(interval.end)}`).join(". "):"Sin ocultación en el tramo reproducido");
 }
 
+function csvValue(value){
+  let text=value===null||value===undefined?"":String(value);
+  if(/^[=+\-@\t\r]/.test(text))text="'"+text;
+  return `"${text.replaceAll('"','""')}"`;
+}
+function downloadTeamCsv(event){
+  if(!teamMode)return;
+  event.preventDefault();
+  if(!state.record)return;
+  const columns=["event_id","session_id","seq","kind","ts","elapsed","level","x","y","z","data_json"];
+  const lines=[columns.map(csvValue).join(",")];
+  for(const item of state.record.events){
+    const pos=item.position||{};
+    const values=[item.event_id,item.session_id,item.seq,item.kind,item.ts,item.elapsed,item.level,pos.x,pos.y,pos.z,JSON.stringify(item.data||{})];
+    lines.push(values.map(csvValue).join(","));
+  }
+  const blob=new Blob(["\uFEFF",lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob),link=document.createElement("a");
+  link.href=url;link.download="resonance-partida.csv";document.body.append(link);link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function signIn(event){
+  event.preventDefault();
+  const submit=$("login-submit"),username=$("login-username").value.trim().toLowerCase(),password=$("login-password").value;
+  submit.disabled=true;submit.textContent="CONECTANDO…";$("login-error").hidden=true;
+  try{
+    const result=await accountRequest({action:"login",username,password});
+    const token=result.session?.session_token;
+    if(typeof token!=="string")throw Error("No se recibió una sesión válida.");
+    accessToken=token;
+    await api("health");
+    sessionStorage.setItem("resonance-team-dashboard-token",token);
+    $("login-password").value="";showWorkspace();showError("");await refresh();
+  }catch(error){
+    accessToken="";
+    const message=error.status===403?"La cuenta inició sesión, pero todavía no está autorizada para ver el archivo del equipo. Pide al administrador que habilite este ID.":error.message;
+    showLogin(message);
+  }finally{submit.disabled=false;submit.textContent="INICIAR SESIÓN";}
+}
+async function signOut(){
+  const token=accessToken;
+  try{if(token)await accountRequest({action:"logout"},token);}catch{}
+  endTeamSession();state.sessions=[];state.selected=null;state.record=null;renderSessions();showLogin();
+  setConnection(false,"Archivo del equipo");
+}
+async function initializeArchive(){
+  if(!teamMode){showWorkspace();await refresh();return;}
+  showLogin();
+  if(!accessToken)return;
+  try{await api("health");showWorkspace();await refresh();}
+  catch(error){
+    if(error.status===401||error.status===403)endTeamSession();
+    showLogin(error.status===403?"Esta cuenta no tiene acceso autorizado al archivo del equipo.":error.status===401?"La sesión caducó. Inicia sesión de nuevo.":"No se pudo conectar. Comprueba tu conexión e inicia sesión.");
+  }
+}
+
 $("refresh").addEventListener("click",refresh);$("search").addEventListener("input",renderSessions);
+$("login-form").addEventListener("submit",signIn);$("logout").addEventListener("click",signOut);$("export").addEventListener("click",downloadTeamCsv);
 $("level").addEventListener("change",()=>{fillAttempts(true);state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
 $("attempt").addEventListener("change",()=>{state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
 for(const id of ["kind","samples"])$(id).addEventListener("change",()=>{state.shown=100;renderTimeline();drawMap();});
@@ -243,4 +350,4 @@ new ResizeObserver(drawMap).observe($("map"));
 setInterval(()=>{if(!state.playing||!state.record)return;state.cursor=Math.min(state.cursor+.25,state.record.session.duration);if(state.cursor>=state.record.session.duration)state.playing=false;updateCursor();drawMap();},100);
 setInterval(()=>{if(!document.hidden)refresh();},5000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh();});
-refresh();
+initializeArchive();

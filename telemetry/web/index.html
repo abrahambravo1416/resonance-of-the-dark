@@ -5,25 +5,40 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#101918">
   <title>Resonance · Archivo de partidas</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/style.css">
-  <script src="/replay.js" defer></script>
-  <script src="/app.js" defer></script>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./config.js" defer></script>
+  <script src="./replay.js" defer></script>
+  <script src="./app.js" defer></script>
 </head>
 <body>
   <header class="masthead">
-    <a class="brand" href="/" aria-label="Resonance, archivo de partidas"><span class="sigil" aria-hidden="true">R</span><span>RESONANCE<span class="brand-sub">OF THE DARK / ARCHIVO DE PARTIDAS</span></span></a>
-    <div class="header-right"><span id="connection" class="connection"><i></i> Conectando…</span><button id="refresh" class="button quiet" title="Actualizar los registros">↻ <span>Actualizar</span></button></div>
+    <a class="brand" href="./" aria-label="Resonance, archivo de partidas"><span class="sigil" aria-hidden="true">R</span><span>RESONANCE<span class="brand-sub">OF THE DARK / ARCHIVO DE PARTIDAS</span></span></a>
+    <div class="header-right"><span id="connection" class="connection"><i></i> Conectando…</span><button id="logout" class="button quiet" type="button" hidden>Cerrar sesión</button><button id="refresh" class="button quiet" title="Actualizar los registros">↻ <span>Actualizar</span></button></div>
   </header>
+  <section id="auth-screen" class="auth-screen" hidden>
+    <form id="login-form" class="auth-card">
+      <span class="eyebrow">ARCHIVO PRIVADO DEL EQUIPO</span>
+      <h1>Huellas compartidas.</h1>
+      <p>Inicia sesión con tu ID y contraseña del juego. Solo las cuentas autorizadas pueden consultar las partidas de todo el equipo.</p>
+      <label for="login-username">ID de jugador</label>
+      <input id="login-username" name="username" autocomplete="username" minlength="3" maxlength="20" required>
+      <label for="login-password">Contraseña</label>
+      <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+      <button id="login-submit" class="button primary" type="submit">INICIAR SESIÓN</button>
+      <p id="login-error" class="auth-error" role="alert" hidden></p>
+    </form>
+  </section>
   <div id="error" class="error" role="alert" hidden></div>
-  <div class="workspace">
+  <div id="workspace" class="workspace" hidden>
     <aside class="sidebar" aria-label="Partidas registradas">
       <div class="sidebar-heading"><span class="eyebrow">EL ARCHIVO</span><span id="session-count" class="count">0</span></div>
+      <p id="player-count" class="player-count">0 instalaciones reconocidas</p>
       <h1>Huellas en la oscuridad.</h1>
       <p class="muted intro">Cada recorrido tiene una historia. Encuentra lo que ocurrió en el cementerio.</p>
       <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Buscar jugador o partida" aria-label="Buscar jugador o partida"></label>
       <div id="sessions" class="session-list" aria-live="polite"></div>
-      <div class="local-note"><span class="tiny-dot"></span> Archivo local · SQLite<span>Los registros se actualizan cada 5 segundos.</span></div>
+      <div id="archive-note" class="local-note"><span class="tiny-dot"></span> Archivo local · SQLite<span>Los registros se actualizan cada 5 segundos.</span></div>
     </aside>
     <main id="main">
       <section id="welcome" class="welcome">
@@ -51,7 +66,7 @@
           <div class="hide-periods"><span>Ocultación</span><div id="hide-periods" class="hide-track" role="img" aria-label="Intervalos de ocultación reproducidos"></div></div>
         </section>
         <section class="timeline panel" aria-labelledby="timeline-heading"><div class="panel-heading"><div><span class="eyebrow">LA HISTORIA DE LA PARTIDA</span><h3 id="timeline-heading">Registro de actividad</h3></div><span id="event-count" class="muted"></span></div><div id="timeline" class="event-list"></div><button id="more" class="button show-more" hidden>Mostrar más acciones</button></section>
-        <footer class="footer">RESONANCE OF THE DARK<span>Datos de esta máquina · No requiere conexión a internet</span></footer>
+        <footer class="footer">RESONANCE OF THE DARK<span id="footer-source">Datos de esta máquina · No requiere conexión a internet</span></footer>
       </div>
     </main>
   </div>
