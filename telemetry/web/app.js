@@ -26,12 +26,12 @@ const labels = {
   position_sample:"Posición del jugador", position:"Posición del jugador", player_position:"Posición del jugador", movement_sample:"Posición del jugador",
   intro_skipped:"Salta la introducción", intro_shown:"Lee la introducción", intro_finished:"Termina la introducción",
   damage_taken:"Recibe daño", health_restored:"Recupera vida", relic_picked_up:"Levanta restos para el ritual",
-  relic_released:"Suelta los restos", jumped:"Salta", campaign_completed:"Completa la campaña",
+  relic_released:"Suelta los restos", relic_delivered:"Entrega restos para el ritual", exit_unlocked:"Abre el portón de salida", jumped:"Salta", campaign_completed:"Completa la campaña",
   hiding_zone_entered:"Entra en una zona de ocultación", hiding_zone_left:"Sale de una zona de ocultación",
   hide_exit_completed:"Termina de salir del escondite", enemy_position_sample:"Posición del enemigo", enemy_removed:"El enemigo deja el nivel",
   memory_collected:"Encuentra un recuerdo", npc_spoken:"Habla con un personaje",
 };
-const outcomeNames = {quit:"Salida del juego",finished:"Partida terminada",completed:"Completada",game_over:"Fin de la partida",window_closed:"Ventana cerrada",application_closed:"Juego cerrado",returned_to_menu:"Regresó al menú",new_run:"Inició otra partida",verification_complete:"Verificación terminada"};
+const outcomeNames = {victory:"Campaña completada",quit:"Salida del juego",finished:"Partida terminada",completed:"Completada",game_over:"Fin de la partida",window_closed:"Ventana cerrada",application_closed:"Juego cerrado",returned_to_menu:"Regresó al menú",new_run:"Inició otra partida",verification_complete:"Verificación terminada"};
 const state = {sessions:[], selected:null, record:null, cursor:0, followEnd:true, playing:false, shown:100, zoom:1, pan:{x:0,y:0}, dragging:null, bounds:null, refreshBusy:false};
 let accessToken = teamMode ? sessionStorage.getItem("resonance-team-dashboard-token") || "" : "";
 const node = (tag, className, text) => {const el = document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
@@ -88,8 +88,7 @@ async function refresh(){
     state.sessions=result.sessions;
     setConnection(health.ok,teamMode?"Archivo del equipo":health.database==="Supabase Postgres"?"Supabase central":"Archivo local");
     const shared=health.database==="Supabase Postgres";
-    $("archive-note").replaceChildren(node("span","tiny-dot"),document.createTextNode(shared?" Archivo central · Supabase":" Archivo local · SQLite"),node("span",null,shared?"Las partidas del equipo se actualizan automáticamente.":"Los registros se actualizan cada 5 segundos."));
-    $("footer-source").textContent=shared?"Archivo central del equipo · Supabase":"Datos de esta máquina · No requiere conexión a internet";
+    $("footer-source").textContent=shared?"Archivo compartido · sincronización automática":"Archivo local · guardado en esta computadora";
     showError(health.rejected_lines?`${health.rejected_lines} línea(s) del registro no pudieron importarse. Los eventos válidos siguen disponibles.`:health.ingestion_error?"La importación encontró un problema. Revisa la terminal del servidor.":"");
     if(!state.selected && state.sessions.length)state.selected=state.sessions[0].session_id;
     renderSessions();
@@ -146,6 +145,8 @@ async function loadSelected(reset){
   $("session-status").className=`badge ${s.status}`;
   $("duration").textContent=duration(s.duration);$("distance").textContent=`${s.distance.toLocaleString("es-MX",{maximumFractionDigits:1})} m`;
   $("actions").textContent=s.action_count.toLocaleString("es-MX");$("levels").textContent=String(s.level_count);
+  renderSessionOutcome(s,result.events);
+  renderObjectiveProgress(result.events);
   $("export").href=teamMode?"#":`/api/export/${encodeURIComponent(s.session_id)}?format=csv`;
   const levels=[...new Set(result.events.map(event=>event.level).filter(level=>level>0))].sort((a,b)=>a-b);
   fillSelect($("level"),levels.map(level=>[level,`Nivel ${level}`]),"Todos los niveles",first?"all":undefined);
@@ -156,6 +157,115 @@ async function loadSelected(reset){
   if(state.followEnd)state.cursor=s.duration;
   if(first){state.zoom=1;state.pan={x:0,y:0};}
   updateCursor();renderTimeline();drawMap();
+}
+function renderSessionOutcome(session,events){
+  const campaign=[...events].reverse().find(event=>event.kind==="campaign_completed");
+  const deaths=events.filter(event=>event.kind==="player_died"||event.kind==="player_death").length;
+  const completedLevelSet=new Set(events.filter(event=>event.kind==="level_completed"&&event.level>0).map(event=>Number(event.level)));
+  for(const level of inferredPriorLevels(events))completedLevelSet.add(level);
+  const completedLevels=[...completedLevelSet].sort((a,b)=>a-b);
+  const outcome=session.status==="active"?"Partida en curso":outcomeNames[session.outcome]||"Partida finalizada";
+  const victory=session.outcome==="victory"||!!campaign;
+  const badge=$("outcome-badge");badge.textContent=victory?"CAMPAÑA COMPLETADA":session.status==="active"?"EN CURSO":session.outcome==="game_over"?"GAME OVER":"RECORRIDO CERRADO";
+  badge.className=`outcome-badge ${victory?"is-victory":session.status==="active"?"is-active":"is-ended"}`;
+  const finalScore=campaign?.data?.final_score;
+  const hasFinalScore=finalScore!==undefined&&finalScore!==null&&Number.isFinite(Number(finalScore));
+  const scoreText=hasFinalScore?Number(finalScore).toLocaleString("es-MX"):"—";
+  const cards=[
+    ["Resultado",outcome,victory?"El jugador llegó al final de la campaña.":session.status==="active"?"La sesión todavía está registrando actividad.":"Estado guardado al cerrar esta sesión."],
+    ["Muertes",deaths.toLocaleString("es-MX"),deaths===1?"Una penalización registrada.":"Penalizaciones registradas en esta sesión."],
+    ["Niveles completados",`${completedLevels.length} / 4`,completedLevels.length?`Superados: ${completedLevels.map(level=>`N${level}`).join(" · ")}`:"Todavía no hay niveles escapados."],
+    ["Puntuación final",scoreText,hasFinalScore?`${Number(campaign.data.penalty_points||0).toLocaleString("es-MX")} puntos descontados por derrotas.`:"Se muestra al completar el Nivel 4."],
+  ];
+  const grid=$("outcome-grid");
+  grid.replaceChildren(...cards.map(([title,value,note])=>{
+    const card=node("article","outcome-stat");card.append(node("span","outcome-label",title),node("strong","outcome-value",value),node("small","outcome-detail",note));return card;
+  }));
+  const priorLevels=inferredPriorLevels(events);
+  const continuationNote=priorLevels.length?` Esta sesión continúa una partida guardada; Nivel${priorLevels.length===1?"":"es"} ${priorLevels.join(", ")} ya estaba${priorLevels.length===1?"":"n"} completado${priorLevels.length===1?"":"s"}. Sus recorridos están en sesiones anteriores.`:"";
+  $("outcome-note").textContent=(victory?`${Number(campaign?.data?.deaths??deaths)} ${Number(campaign?.data?.deaths??deaths)===1?"muerte":"muertes"} · puntuación de campaña calculada con las penalizaciones aplicadas.`:"El resultado y las muertes corresponden únicamente a esta sesión.")+continuationNote;
+}
+function inferredPriorLevels(events){
+  const load=[...events].reverse().find(event=>event.kind==="saved_game_loaded");
+  const currentLevel=Number(load?.data?.level||1);
+  return Number.isInteger(currentLevel)?Array.from({length:Math.max(0,Math.min(4,currentLevel)-1)},(_,index)=>index+1):[];
+}
+const objectiveFallbacks={
+  1:[{key:"altars",name:"Altares encendidos",icon:"✧",total:2}],
+  2:[{key:"altars",name:"Altares encendidos",icon:"✧",total:4}],
+  3:[{key:"pumpkins",name:"Calabazas recolectadas",icon:"●",total:7},{key:"altars",name:"Altares encendidos",icon:"✧",total:4}],
+  4:[{key:"pumpkins",name:"Calabazas recolectadas",icon:"●",total:4},{key:"relics",name:"Restos entregados",icon:"t",total:2},{key:"altars",name:"Altares encendidos",icon:"✧",total:4}],
+};
+function renderObjectiveProgress(events){
+  const groups=new Map(),latestByLevel=new Map();
+  for(const event of events){
+    const level=Number(event.level||0);if(level<1)continue;
+    const attempt=getAttempt(event);let key;
+    if(event.kind==="level_started"){
+      key=attempt!=="0"?`${level}:${attempt}`:`${level}:legacy:${event.seq??groups.size}`;
+      if(!groups.has(key))groups.set(key,{level,attempt,events:[],initial:{}});
+      latestByLevel.set(level,key);
+    }else{
+      key=attempt!=="0"?`${level}:${attempt}`:latestByLevel.get(level);
+      if(!key){key=`${level}:${attempt}`;if(!groups.has(key))groups.set(key,{level,attempt,events:[],initial:{}});}
+    }
+    const group=groups.get(key);if(!group)continue;group.events.push(event);
+    if(event.kind==="level_started"&&event.data?.mission_progress&&typeof event.data.mission_progress==="object")group.initial=event.data.mission_progress;
+  }
+  const ordered=[...groups.values()];
+  const loadedLevels=inferredPriorLevels(events);
+  for(const level of loadedLevels){
+    const existing=ordered.find(group=>group.level===level);
+    if(existing&&existing.events.some(event=>event.kind==="level_completed"))continue;
+    const totals={altars:level===1?2:4};
+    const initial={altars:{lit:totals.altars,required:totals.altars,done:true},escape_unlocked:true};
+    if(level===3)initial.pumpkins={completed:7,required:7,done:true};
+    if(level===4){initial.pumpkins={completed:4,required:4,done:true};initial.absolute_ritual={delivered:2,required:2,done:true};}
+    const savedProgress={level,attempt:"guardado",events:[],initial,carriedOver:true};
+    if(existing)ordered[ordered.indexOf(existing)]=savedProgress;else ordered.push(savedProgress);
+  }
+  ordered.sort((a,b)=>a.level-b.level||String(a.attempt).localeCompare(String(b.attempt),"es",{numeric:true}));
+  $("objective-attempt-count").textContent=`${ordered.length} ${ordered.length===1?"nivel":"niveles"} mostrados`;
+  const container=$("objective-progress");
+  if(!ordered.length){container.replaceChildren(node("p","no-results","Todavía no hay progreso de niveles en esta partida."));return;}
+  container.replaceChildren(...ordered.map(renderObjectiveCard));
+}
+function objectiveCounts(group,spec){
+  const aliases={altars:"altars",pumpkins:"pumpkins",relics:"absolute_ritual"};
+  const initial=group.initial?.[aliases[spec.key]]||{};
+  const initialCount=spec.key==="altars"?initial.lit:spec.key==="relics"?initial.delivered:initial.completed;
+  let total=Number(initial.required)||spec.total,completed=Number(initialCount)||0,done=Boolean(initial.done);
+  for(const event of group.events){
+    const data=event.data||{};
+    if(spec.key==="altars"&&event.kind==="altar_activated")completed=Math.max(completed,Number(data.completed)||completed+1);
+    if(spec.key==="pumpkins"&&event.kind==="pumpkin_collected")completed=Math.max(completed,Number(data.collected)||completed+1);
+    if(spec.key==="relics"&&event.kind==="relic_delivered")completed=Math.max(completed,Number(data.completed)||completed+1);
+    if((event.kind==="mission_completed"||event.kind==="quest_completed")&&data.mission===spec.key)done=true;
+    if(Number(data.required)>0&&((spec.key==="altars"&&event.kind==="altar_activated")||(spec.key==="pumpkins"&&event.kind==="pumpkin_collected")||(spec.key==="relics"&&event.kind==="relic_delivered")))total=Number(data.required);
+  }
+  if(done)completed=total;
+  return {completed:Math.min(total,completed),total,done:done||completed>=total};
+}
+function renderObjectiveCard(group){
+  const card=node("article","objective-card");
+  const levelDone=group.carriedOver||group.events.some(event=>event.kind==="level_completed");
+  const exitOpen=Boolean(group.initial?.escape_unlocked)||group.events.some(event=>event.kind==="exit_unlocked");
+  const status=node("span",`objective-status ${levelDone?"is-complete":exitOpen?"is-open":"is-active"}`,group.carriedOver?"Superado antes":levelDone?"Escapó":exitOpen?"Salida abierta":"En progreso");
+  const header=node("div","objective-card-heading");header.append(node("div","objective-card-title",`Nivel ${group.level}`),node("span","objective-attempt",group.carriedOver?"Progreso guardado":`Intento ${group.attempt==="0"?"—":group.attempt}`),status);card.append(header);
+  const missions=objectiveFallbacks[group.level]||[];
+  for(const spec of missions){
+    const counts=objectiveCounts(group,spec);const percent=counts.total>0?Math.round(counts.completed/counts.total*100):0;
+    const row=node("div",`objective-row key-${spec.key} ${counts.done?"is-complete":""}`);
+    const line=node("div","objective-line");line.append(node("span","objective-icon",spec.icon),node("span","objective-name",spec.name),node("span","objective-count",`${counts.completed} / ${counts.total}`));
+    const track=node("div","objective-track");const fill=node("span");fill.style.width=`${percent}%`;track.append(fill);
+    row.append(line,track,node("small","objective-hint",counts.done?"Completado":"Progreso registrado"));card.append(row);
+  }
+  const escape=node("div",`objective-escape ${levelDone?"is-complete":exitOpen?"is-open":""}`);
+  const escapeEvents=group.events.filter(event=>event.kind==="exit_unlocked"||event.kind==="level_completed");
+  const escapeEvent=escapeEvents.at(-1);
+  const escapeStatus=levelDone?"Salida cruzada":exitOpen?"Portón abierto":"Pendiente";
+  escape.append(node("span",null,"Salida"),node("strong",null,group.carriedOver?"Cruzada en sesión anterior":escapeStatus),node("small",null,escapeEvent?clock(escapeEvent.elapsed):group.carriedOver?"Antes de esta sesión":"Completa los objetivos del nivel"));card.append(escape);
+  return card;
 }
 function fillAttempts(reset=false){
   if(!state.record)return;

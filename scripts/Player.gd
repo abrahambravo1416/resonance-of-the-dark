@@ -1619,12 +1619,17 @@ func _show_level_complete_screen() -> void:
 
 
 func _show_final_victory_screen() -> void:
-	_log("campaign_completed")
+	var game_manager := get_node("/root/GameManager")
+	_is_new_high_score = bool(game_manager.call("check_and_update_high_score"))
+	_log("campaign_completed", {
+		"final_score": int(game_manager.get("total_score")),
+		"deaths": int(game_manager.get("penalties_count")),
+		"penalty_points": int(game_manager.call("get_total_penalty_points")),
+		"levels_completed": 4,
+	})
 	var logger := get_node_or_null("/root/GameplayLog")
 	if logger != null:
 		logger.call("end_session", "victory")
-	_is_new_high_score = bool(get_node("/root/GameManager").call("check_and_update_high_score"))
-	var game_manager := get_node("/root/GameManager")
 	if int(game_manager.get("active_save_slot")) > 0:
 		var snapshot: Dictionary = game_manager.call("make_campaign_snapshot", 4, true)
 		get_node("/root/CloudAccount").call("queue_checkpoint", 4, snapshot)

@@ -38,7 +38,6 @@
       <p class="muted intro">Cada recorrido tiene una historia. Encuentra lo que ocurrió en el cementerio.</p>
       <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Buscar jugador o partida" aria-label="Buscar jugador o partida"></label>
       <div id="sessions" class="session-list" aria-live="polite"></div>
-      <div id="archive-note" class="local-note"><span class="tiny-dot"></span> Archivo local · SQLite<span>Los registros se actualizan cada 5 segundos.</span></div>
     </aside>
     <main id="main">
       <section id="welcome" class="welcome">
@@ -55,6 +54,15 @@
           <div class="metric"><span>Acciones registradas</span><strong id="actions">—</strong><small>sin contar muestras de posición</small></div>
           <div class="metric"><span>Niveles visitados</span><strong id="levels">—</strong><small>en esta sesión de juego</small></div>
         </section>
+        <section class="session-outcome panel" aria-labelledby="outcome-heading">
+          <div class="panel-heading"><div><span class="eyebrow">CIERRE DE LA PARTIDA</span><h3 id="outcome-heading">Resultado del recorrido</h3></div><span id="outcome-badge" class="outcome-badge">En curso</span></div>
+          <div class="outcome-grid" id="outcome-grid" aria-live="polite"></div>
+          <p id="outcome-note" class="outcome-note"></p>
+        </section>
+        <section class="objectives-panel panel" aria-labelledby="objectives-heading">
+          <div class="panel-heading"><div><span class="eyebrow">PROGRESO DE LA CAMPAÑA</span><h3 id="objectives-heading">Objetivos por nivel e intento</h3></div><span id="objective-attempt-count" class="muted"></span></div>
+          <div id="objective-progress" class="objective-grid" aria-live="polite"></div>
+        </section>
         <div class="filters"><div class="filter"><label for="level">Nivel</label><select id="level"><option value="all">Todos los niveles</option></select></div><div class="filter"><label for="attempt">Recorrido</label><select id="attempt"><option value="all">Todos los intentos</option></select></div><div class="filter"><label for="kind">Actividad</label><select id="kind"><option value="all">Todas las acciones</option></select></div><label class="checkbox"><input id="samples" type="checkbox"> Ver muestras de posición</label></div>
         <section class="map-panel panel" aria-labelledby="map-heading">
           <div class="panel-heading"><div><span class="eyebrow">CARTOGRAFÍA DEL RECORRIDO</span><h3 id="map-heading">Por dónde caminó</h3></div><div class="map-tools"><button id="zoom-out" class="icon-button" aria-label="Alejar plano">−</button><button id="zoom-in" class="icon-button" aria-label="Acercar plano">+</button><button id="fit" class="button quiet">Ajustar vista</button></div></div>
@@ -66,7 +74,7 @@
           <div class="hide-periods"><span>Ocultación</span><div id="hide-periods" class="hide-track" role="img" aria-label="Intervalos de ocultación reproducidos"></div></div>
         </section>
         <section class="timeline panel" aria-labelledby="timeline-heading"><div class="panel-heading"><div><span class="eyebrow">LA HISTORIA DE LA PARTIDA</span><h3 id="timeline-heading">Registro de actividad</h3></div><span id="event-count" class="muted"></span></div><div id="timeline" class="event-list"></div><button id="more" class="button show-more" hidden>Mostrar más acciones</button></section>
-        <footer class="footer">RESONANCE OF THE DARK<span id="footer-source">Datos de esta máquina · No requiere conexión a internet</span></footer>
+        <footer class="footer"><span class="footer-brand">RESONANCE OF THE DARK</span><span id="footer-source">Archivo de partidas del equipo · sincronización automática</span></footer>
       </div>
     </main>
   </div>

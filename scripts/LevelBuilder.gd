@@ -356,6 +356,7 @@ func _restore_saved_level_progress() -> void:
 		relic.set_meta("delivered", true)
 		relic.set_meta("carried", false)
 		delivered_count += 1
+	absolute_ritual_relics_delivered = delivered_count
 
 	var carried_index := int(progress.get("carried_relic_index", -1))
 	if carried_index >= 0:
@@ -1787,8 +1788,18 @@ func _deposit_absolute_ritual_relic(actor: Node3D, relic: Node3D) -> bool:
 	relic.global_rotation = Vector3(0.0, _rng.randf_range(0.0, TAU), 0.0)
 	relic.set_meta("carried", false)
 	relic.set_meta("delivered", true)
-	_record_event("relic_delivered", {"node": str(relic.name)}, actor.global_position)
 	absolute_ritual_relics_delivered = mini(absolute_ritual_relics_delivered + 1, _absolute_ritual_relic_count)
+	_record_event("relic_delivered", {
+		"node": str(relic.name),
+		"completed": absolute_ritual_relics_delivered,
+		"required": _absolute_ritual_relic_count,
+	}, actor.global_position)
+	if absolute_ritual_relics_delivered >= _absolute_ritual_relic_count:
+		_record_event("mission_completed", {
+			"mission": "relics",
+			"completed": absolute_ritual_relics_delivered,
+			"required": _absolute_ritual_relic_count,
+		}, actor.global_position)
 	if actor.has_method("set_absolute_ritual_relic_progress"):
 		actor.call("set_absolute_ritual_relic_progress", absolute_ritual_relics_delivered, _absolute_ritual_relic_count)
 	return true

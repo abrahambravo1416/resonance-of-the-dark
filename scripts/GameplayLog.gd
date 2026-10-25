@@ -186,10 +186,18 @@ func observe_level(scene: Node) -> void:
 	var level_value: int = int(scene.get("level_number"))
 	var grid: Vector2i = scene.get("grid_size")
 	var cell: float = float(scene.get("cell_size"))
+	var mission_progress: Dictionary = {}
+	var actor := scene.get_node_or_null("Player")
+	if actor != null and scene.has_method("make_campaign_level_progress_snapshot"):
+		var snapshot: Dictionary = scene.call("make_campaign_level_progress_snapshot", actor)
+		var missions: Variant = snapshot.get("missions", {})
+		if missions is Dictionary:
+			mission_progress = missions.duplicate(true)
 	set_level(level_value, {
 		"scene": scene.scene_file_path, "title": "Cementerio %d" % level_value,
 		"map_bounds": {"min_x": -cell * 2.0, "max_x": float(grid.x) * cell, "min_z": -cell, "max_z": float(grid.y) * cell},
 		"map_geometry": _map_geometry(scene),
+		"mission_progress": mission_progress,
 	})
 	_scene_id = scene.get_instance_id()
 
