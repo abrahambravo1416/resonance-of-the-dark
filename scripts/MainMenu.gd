@@ -37,6 +37,7 @@ func _build_interface() -> void:
 	$MenuLayout/PlayButton.pressed.connect(_start_guest_game)
 	$MenuLayout/ExitButton.pressed.connect(_quit_game)
 	_add_account_button()
+	_add_controls_button()
 	_update_vignette_aspect()
 
 
@@ -60,6 +61,30 @@ func _add_account_button() -> void:
 
 func _open_save_slots() -> void:
 	add_child(SAVE_SLOTS_MENU_SCENE.instantiate())
+
+
+func _add_controls_button() -> void:
+	var button := Button.new()
+	button.name = "ControlsButton"
+	button.custom_minimum_size = Vector2(280, 48)
+	button.text = "CONTROLES"
+	button.add_theme_font_size_override("font_size", 17)
+	button.add_theme_color_override("font_color", Color(1.0, 0.941, 0.831, 1.0))
+	button.add_theme_color_override("font_hover_color", Color.WHITE)
+	button.add_theme_stylebox_override("normal", $MenuLayout/PlayButton.get_theme_stylebox("normal"))
+	button.add_theme_stylebox_override("hover", $MenuLayout/PlayButton.get_theme_stylebox("hover"))
+	button.add_theme_stylebox_override("pressed", $MenuLayout/PlayButton.get_theme_stylebox("pressed"))
+	button.pressed.connect(_play_menu_click)
+	button.pressed.connect(_open_control_settings)
+	var menu_layout := $MenuLayout as VBoxContainer
+	menu_layout.add_child(button)
+	menu_layout.move_child(button, $MenuLayout/ExitButton.get_index())
+
+
+func _open_control_settings() -> void:
+	var touch_hud := get_node_or_null("/root/TouchHUD")
+	if touch_hud != null:
+		touch_hud.call("open_settings")
 
 
 func _update_vignette_aspect() -> void:

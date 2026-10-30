@@ -133,9 +133,10 @@ Sistema dinámico de vibración localizado en `Player.gd` para enfatizar las acc
 | Parámetro | Valor de referencia | Configuración implementada |
 | :--- | :--- | :--- |
 | Radio del joystick | 80–120 px | 100 px por defecto, escalable |
-| Zona muerta | 0.15–0.25 | 0.20, ajustable entre 0.15 y 0.25 |
+| Zona muerta del joystick | 0.05–0.35 | 0.15 por defecto, ajustable |
 | Tamaño mínimo de botones de acción | ≥ 96 px | 108 × 108 px; mínimo ajustable 97.2 px |
-| Opacidad | 0.4–0.7 | 0.55, ajustable |
+| Tamaño de controles | 90–150% | 90% por defecto, ajustable |
+| Opacidad | 10–100% | 40% por defecto, ajustable |
 | Duración de vibración | 30–80 ms | 40 ms acción/recolección, 70 ms daño |
 | Orientación y stretch | Landscape, canvas_items + expand | Landscape, `canvas_items`, `expand`, referencia 1280 × 720 |
 
@@ -147,8 +148,8 @@ Son píxeles lógicos del viewport; su tamaño físico depende de la pantalla. E
 - **Interacción dinámica estilo Minecraft PE:** un botón contextual muestra la acción disponible: esconderse/salir, recoger, encender altar, llevar restos o hablar/recordar. El portón abierto se cruza caminando, como antes.
 - **Multitouch:** cada dedo mantiene su índice hasta liberarse, incluso si sale del área. Movimiento, cámara y botones son independientes. Pausar, ocultar el HUD o perder foco libera la entrada virtual.
 - **Safe area:** los márgenes físicos de `DisplayServer.get_display_safe_area()` se convierten a coordenadas del viewport al cambiar de tamaño. El radar se sitúa por encima del joystick.
-- **Ajustes:** botón **Controles**, disponible desde el menú y el HUD. Opacidad, tamaño, zona muerta y vibración se guardan en `user://touch_controls.cfg`, independiente de las partidas y cuentas.
-- **Depuración en PC:** activa **Probar táctil en PC** en Controles, o ejecuta con `RESONANCE_TOUCH_DEBUG=1`. Se comprueba `OS.has_feature("debug")`; una exportación PC normal mantiene oculto el HUD. `Emulate Touch From Mouse` está habilitado. [Godot también considera la emulación como disponibilidad táctil](https://docs.godotengine.org/en/stable/classes/class_displayserver.html#class-displayserver-method-is-touchscreen-available); se distingue del dispositivo físico para que el HUD siga oculto en PC hasta activar la prueba. Un mouse representa un dedo; las pruebas automatizadas inyectan índices separados para verificar multitouch.
+- **Ajustes:** botón **Controles** en el menú principal o dentro del menú de pausa. Opacidad, tamaño, zona muerta y vibración se guardan en `user://touch_controls.cfg`; **Restablecer predeterminado** recupera el perfil inicial (40% de opacidad, 90% de tamaño y zona muerta 0.15).
+- **Depuración en PC:** activa **Probar táctil en PC** en Controles durante una ejecución de depuración, o usa `RESONANCE_TOUCH_DEBUG=1`. El ajuste está desactivado por defecto y el botón **Restablecer predeterminado** vuelve a desactivarlo. `Emulate Touch From Mouse` está habilitado. [Godot también considera la emulación como disponibilidad táctil](https://docs.godotengine.org/en/stable/classes/class_displayserver.html#class-displayserver-method-is-touchscreen-available); se distingue del dispositivo físico para que el HUD siga oculto en PC sin activar la prueba. Un mouse representa un dedo; las pruebas automatizadas inyectan índices separados para verificar multitouch.
 - Gamepad: stick izquierdo mueve, derecho mira; A salta, LB corre, B agacha, X recoge, Y esconde, Start pausa. Cruceta: arriba narrativa, izquierda altar, abajo curación, derecha restos.
 
 Los archivos principales son `scripts/VirtualJoystick.gd`, `scripts/TouchHUD.gd`, `scripts/UnifiedInput.gd`, `scripts/ControlSettings.gd` y `scenes/ui/TouchHUD.tscn`. Los botones son nodos `TouchScreenButton` editables; sus acciones son `ui_accept`, `sprint`, `crouch`, `ui_cancel` y la interacción correspondiente. `VirtualJoystick` también funciona de forma independiente, usando directamente `Input.action_press/action_release` si no existe el mezclador.

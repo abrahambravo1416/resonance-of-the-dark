@@ -143,6 +143,18 @@ theme_override_styles/pressed = SubResource("StyleBoxFlat_hwnlo")
 theme_override_styles/hover = SubResource("StyleBoxFlat_hwnlo")
 text = "MENÚ PRINCIPAL"
 
+[node name="ControlsButton" type="Button" parent="PauseOverlay/PauseLayout"]
+process_mode = 3
+custom_minimum_size = Vector2(300, 52)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.941, 0.831, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 17
+theme_override_styles/normal = SubResource("StyleBoxFlat_1vkhv")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_hwnlo")
+theme_override_styles/hover = SubResource("StyleBoxFlat_hwnlo")
+text = "CONTROLES"
+
 [node name="ExitButton" type="Button" parent="PauseOverlay/PauseLayout" unique_id=933858089]
 process_mode = 3
 custom_minimum_size = Vector2(300, 52)

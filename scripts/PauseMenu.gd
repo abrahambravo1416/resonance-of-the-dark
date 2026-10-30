@@ -39,6 +39,8 @@ func _build_interface() -> void:
 	$PauseOverlay/PauseLayout/ResumeButton.pressed.connect(_resume_game)
 	$PauseOverlay/PauseLayout/MenuButton.pressed.connect(_play_menu_click)
 	$PauseOverlay/PauseLayout/MenuButton.pressed.connect(_go_to_main_menu)
+	$PauseOverlay/PauseLayout/ControlsButton.pressed.connect(_play_menu_click)
+	$PauseOverlay/PauseLayout/ControlsButton.pressed.connect(_open_control_settings)
 	$PauseOverlay/PauseLayout/ExitButton.pressed.connect(_play_menu_click)
 	$PauseOverlay/PauseLayout/ExitButton.pressed.connect(_quit_game)
 
@@ -68,6 +70,12 @@ func _go_to_main_menu() -> void:
 func _quit_game() -> void:
 	_end_session("quit")
 	get_tree().quit()
+
+
+func _open_control_settings() -> void:
+	var touch_hud := get_node_or_null("/root/TouchHUD")
+	if touch_hud != null:
+		touch_hud.call("open_settings")
 
 
 func _ensure_pause_action() -> void:

@@ -1,10 +1,14 @@
 extends Node
 signal changed
+const DEFAULT_OPACITY: float = 0.4
+const DEFAULT_CONTROL_SCALE: float = 0.9
+const DEFAULT_DEAD_ZONE: float = 0.15
+const DEFAULT_VIBRATION: bool = true
 var settings_path: String = OS.get_environment("RESONANCE_CONTROL_CONFIG") if not OS.get_environment("RESONANCE_CONTROL_CONFIG").is_empty() else "user://touch_controls.cfg"
-var opacity: float = 0.55
-var control_scale: float = 1.0
-var dead_zone: float = 0.2
-var vibration: bool = true
+var opacity: float = DEFAULT_OPACITY
+var control_scale: float = DEFAULT_CONTROL_SCALE
+var dead_zone: float = DEFAULT_DEAD_ZONE
+var vibration: bool = DEFAULT_VIBRATION
 var debug_touch: bool = false
 var touchscreen_available: bool = false
 
@@ -17,10 +21,10 @@ func _ready() -> void:
 		touchscreen_available = bool(bridge.eval("navigator.maxTouchPoints > 0"))
 	var config := ConfigFile.new()
 	if config.load(settings_path) == OK:
-		opacity = clampf(float(config.get_value("touch", "opacity", 0.55)), 0.4, 0.7)
-		control_scale = clampf(float(config.get_value("touch", "scale", 1.0)), 0.9, 1.35)
-		dead_zone = clampf(float(config.get_value("touch", "dead_zone", 0.2)), 0.15, 0.25)
-		vibration = bool(config.get_value("touch", "vibration", true))
+		opacity = clampf(float(config.get_value("touch", "opacity", DEFAULT_OPACITY)), 0.1, 1.0)
+		control_scale = clampf(float(config.get_value("touch", "scale", DEFAULT_CONTROL_SCALE)), 0.9, 1.5)
+		dead_zone = clampf(float(config.get_value("touch", "dead_zone", DEFAULT_DEAD_ZONE)), 0.05, 0.35)
+		vibration = bool(config.get_value("touch", "vibration", DEFAULT_VIBRATION))
 		debug_touch = bool(config.get_value("touch", "debug_touch", false))
 
 func touch_enabled() -> bool:
@@ -35,6 +39,14 @@ func save() -> void:
 	config.set_value("touch", "debug_touch", debug_touch)
 	config.save(settings_path)
 	changed.emit()
+
+func reset_to_defaults() -> void:
+	opacity = DEFAULT_OPACITY
+	control_scale = DEFAULT_CONTROL_SCALE
+	dead_zone = DEFAULT_DEAD_ZONE
+	vibration = DEFAULT_VIBRATION
+	debug_touch = false
+	save()
 
 func haptic(ms: int = 40) -> void:
 	if vibration and OS.get_name() in ["Android", "iOS"]:

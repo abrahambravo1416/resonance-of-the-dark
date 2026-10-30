@@ -28,28 +28,25 @@ script = ExtResource("2")
 [node name="Jump" type="TouchScreenButton" parent="TouchControls"]
 action = "ui_accept"
 script = ExtResource("3")
-caption = "Saltar"
+caption = "↑"
 [node name="Sprint" type="TouchScreenButton" parent="TouchControls"]
 action = "sprint"
 script = ExtResource("3")
-caption = "Correr"
+caption = "»"
 [node name="Crouch" type="TouchScreenButton" parent="TouchControls"]
 action = "crouch"
 script = ExtResource("3")
-caption = "Agachar"
-[node name="Pause" type="TouchScreenButton" parent="TouchControls"]
+caption = "↓"
+[node name="Pause" type="TouchScreenButton" parent="."]
 action = "ui_cancel"
 script = ExtResource("3")
-caption = "Pausa"
+caption = "Ⅱ"
+button_size = Vector2(72, 72)
 [node name="InteractionPrompt" type="TouchScreenButton" parent="TouchControls"]
 action = "interact"
 script = ExtResource("3")
 caption = "Interactuar"
 button_size = Vector2(280, 108)
-[node name="SettingsButton" type="Button" parent="."]
-text = "Controles"
-theme_override_font_sizes/font_size = 20
-focus_mode = 0
 [node name="SettingsPanel" type="Control" parent="."]
 mouse_filter = 0
 [node name="Shade" type="ColorRect" parent="SettingsPanel"]
@@ -64,56 +61,78 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -300.0
-offset_top = -310.0
+offset_top = -280.0
 offset_right = 300.0
-offset_bottom = 310.0
+offset_bottom = 280.0
 theme_override_styles/panel = SubResource("panel")
 [node name="Margin" type="MarginContainer" parent="SettingsPanel/Card"]
-theme_override_constants/margin_left = 30
-theme_override_constants/margin_right = 30
-theme_override_constants/margin_top = 22
-theme_override_constants/margin_bottom = 22
+theme_override_constants/margin_left = 22
+theme_override_constants/margin_right = 22
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_bottom = 16
 [node name="Fields" type="VBoxContainer" parent="SettingsPanel/Card/Margin"]
-theme_override_constants/separation = 10
+theme_override_constants/separation = 5
 [node name="Title" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
 text = "CONTROLES TÁCTILES"
-theme_override_font_sizes/font_size = 28
+theme_override_font_sizes/font_size = 25
 [node name="OpacityLabel" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
 text = "Opacidad"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 18
 [node name="Opacity" type="HSlider" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 48)
-min_value = 0.4
-max_value = 0.7
-step = 0.01
-value = 0.55
+custom_minimum_size = Vector2(0, 34)
+min_value = 0.1
+max_value = 1.0
+step = 0.05
+value = 0.4
+tick_count = 7
+ticks_on_borders = true
+[node name="OpacityHint" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
+theme_override_colors/font_color = Color(0.63, 0.76, 0.68, 1)
+theme_override_font_sizes/font_size = 13
+text = "Más opacidad hace que joystick y botones resalten más."
 [node name="SizeLabel" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
 text = "Tamaño de controles"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 18
 [node name="Size" type="HSlider" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 48)
+custom_minimum_size = Vector2(0, 34)
 min_value = 0.9
-max_value = 1.35
+max_value = 1.5
 step = 0.05
-value = 1
+value = 0.9
+tick_count = 8
+ticks_on_borders = true
+[node name="SizeHint" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
+theme_override_colors/font_color = Color(0.63, 0.76, 0.68, 1)
+theme_override_font_sizes/font_size = 13
+text = "Ajusta el tamaño del joystick y de los botones táctiles."
 [node name="DeadZoneLabel" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
-text = "Zona muerta"
-theme_override_font_sizes/font_size = 22
+text = "Zona muerta del joystick"
+theme_override_font_sizes/font_size = 18
 [node name="DeadZone" type="HSlider" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 48)
-min_value = 0.15
-max_value = 0.25
+custom_minimum_size = Vector2(0, 34)
+min_value = 0.05
+max_value = 0.35
 step = 0.01
-value = 0.2
+value = 0.15
+tick_count = 7
+ticks_on_borders = true
+[node name="DeadZoneHint" type="Label" parent="SettingsPanel/Card/Margin/Fields"]
+theme_override_colors/font_color = Color(0.63, 0.76, 0.68, 1)
+theme_override_font_sizes/font_size = 13
+text = "El anillo central del joystick ignora roces leves del pulgar."
 [node name="Vibration" type="CheckButton" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 42)
 text = "Vibración"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 18
 [node name="DebugTouch" type="CheckButton" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 52)
+custom_minimum_size = Vector2(0, 42)
 text = "Probar táctil en PC"
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 18
 [node name="Close" type="Button" parent="SettingsPanel/Card/Margin/Fields"]
-custom_minimum_size = Vector2(0, 72)
+custom_minimum_size = Vector2(0, 54)
 text = "Guardar y volver"
-theme_override_font_sizes/font_size = 24
+theme_override_font_sizes/font_size = 19
+[node name="ResetDefaults" type="Button" parent="SettingsPanel/Card/Margin/Fields"]
+custom_minimum_size = Vector2(0, 50)
+text = "Restablecer predeterminado"
+theme_override_font_sizes/font_size = 18

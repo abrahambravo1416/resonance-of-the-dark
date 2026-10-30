@@ -5,6 +5,7 @@ extends CanvasLayer
 @onready var joystick: Control = $TouchControls/VirtualJoystick
 @onready var look: Control = $TouchControls/LookArea
 @onready var interaction: TouchScreenButton = $TouchControls/InteractionPrompt
+@onready var pause_button: TouchScreenButton = $Pause
 @onready var settings_panel: Control = $SettingsPanel
 var player: Node
 var last_health: int = 0
@@ -18,8 +19,8 @@ func _ready() -> void:
 	process_priority = 100
 	get_node("/root/ControlSettings").changed.connect(_apply_settings)
 	get_viewport().size_changed.connect(_layout)
-	$SettingsButton.pressed.connect(open_settings)
 	$SettingsPanel/Card/Margin/Fields/Close.pressed.connect(close_settings)
+	$SettingsPanel/Card/Margin/Fields/ResetDefaults.pressed.connect(_reset_settings)
 	var fields := $SettingsPanel/Card/Margin/Fields
 	var config := get_node("/root/ControlSettings")
 	for item in [["Opacity", "opacity"], ["Size", "control_scale"], ["DeadZone", "dead_zone"]]:
@@ -48,7 +49,7 @@ func _process(_delta: float) -> void:
 			_layout()
 	var playable: bool = is_instance_valid(player) and not get_tree().paused and not player.controls_frozen and not player.is_dead
 	controls.visible = _enabled() and playable
-	$SettingsButton.visible = not settings_panel.visible and (not playable or _enabled())
+	pause_button.visible = playable
 	if controls.visible != _previous_visible:
 		release_controls()
 		_previous_visible = controls.visible
@@ -91,9 +92,14 @@ func _apply_settings() -> void:
 	var config := get_node("/root/ControlSettings")
 	controls.modulate.a = config.opacity
 	var fields := $SettingsPanel/Card/Margin/Fields
-	fields.get_node("OpacityLabel").text = "Opacidad: %d%%" % roundi(config.opacity * 100)
-	fields.get_node("SizeLabel").text = "Tamaño de controles: %d%%" % roundi(config.control_scale * 100)
-	fields.get_node("DeadZoneLabel").text = "Zona muerta: %.2f" % config.dead_zone
+	fields.get_node("OpacityLabel").text = "Opacidad: " + str(roundi(config.opacity * 100)) + "%"
+	fields.get_node("SizeLabel").text = "Tamaño de controles: " + str(roundi(config.control_scale * 100)) + "%"
+	fields.get_node("DeadZoneLabel").text = "Zona muerta del joystick: " + String.num(float(config.dead_zone), 2)
+	fields.get_node("Opacity").set_value_no_signal(config.opacity)
+	fields.get_node("Size").set_value_no_signal(config.control_scale)
+	fields.get_node("DeadZone").set_value_no_signal(config.dead_zone)
+	fields.get_node("Vibration").button_pressed = config.vibration
+	fields.get_node("DebugTouch").button_pressed = config.debug_touch
 	joystick.dead_zone = config.dead_zone
 	release_controls()
 	_layout()
@@ -121,22 +127,29 @@ func _layout() -> void:
 	joystick.position = Vector2(26, area.y - radius * 2 - 28)
 	look.position = Vector2(area.x * 0.43, 140)
 	look.size = Vector2(area.x * 0.57, maxf(0, area.y - 370))
-	for item in [["Jump", Vector2(area.x - 82 * scale_factor, area.y - 84 * scale_factor)], ["Sprint", Vector2(area.x - 208 * scale_factor, area.y - 84 * scale_factor)], ["Crouch", Vector2(area.x - 82 * scale_factor, area.y - 210 * scale_factor)], ["Pause", Vector2(area.x * 0.5, 66 * scale_factor)]]:
+	for item in [["Jump", Vector2(area.x - 82 * scale_factor, area.y - 210 * scale_factor)], ["Sprint", Vector2(area.x - 208 * scale_factor, area.y - 84 * scale_factor)], ["Crouch", Vector2(area.x - 82 * scale_factor, area.y - 84 * scale_factor)]]:
 		var button: Node2D = controls.get_node(item[0])
 		button.position = item[1]
 		button.scale = Vector2.ONE * scale_factor
-	interaction.position = Vector2(area.x * 0.55, area.y - 75 * scale_factor)
+	pause_button.position = _safe_rect.position + Vector2(area.x * 0.5, 66.0 * scale_factor)
+	pause_button.scale = Vector2.ONE * scale_factor
+	interaction.position = Vector2(area.x * 0.5, area.y - 75 * scale_factor)
 	interaction.scale = Vector2.ONE * scale_factor
-	$SettingsButton.position = _safe_rect.position + Vector2(area.x * 0.5 + 70 * scale_factor, 18)
-	$SettingsButton.size = Vector2(120, 64)
 	$SettingsPanel.position = _safe_rect.position
 	$SettingsPanel.size = area
+	var card: Control = $SettingsPanel/Card
+	var card_width: float = minf(620.0, maxf(280.0, area.x - 32.0))
+	var card_height: float = minf(620.0, maxf(280.0, area.y - 24.0))
+	card.offset_left = -card_width * 0.5
+	card.offset_right = card_width * 0.5
+	card.offset_top = -card_height * 0.5
+	card.offset_bottom = card_height * 0.5
 	if is_instance_valid(player) and _enabled():
 		var radar: Control = player.get_node("ThreatRadarLayer/ThreatRadarHUD")
 		_remember_layout(radar)
 		radar.set_anchors_preset(Control.PRESET_TOP_LEFT)
 		radar.position = _safe_rect.position + Vector2(20, 180)
-		radar.scale = Vector2.ONE * 0.72
+		radar.scale = Vector2.ONE * 0.9
 		for narrative in get_tree().get_nodes_in_group("narrative_layers"):
 			_remember_layout(narrative.panel)
 			narrative.panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -152,9 +165,13 @@ func open_settings() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func close_settings() -> void:
+	get_node("/root/ControlSettings").save()
 	settings_panel.hide()
 	get_tree().paused = _settings_paused_before
 	if is_instance_valid(player) and not _enabled() and not get_tree().paused: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func _reset_settings() -> void:
+	get_node("/root/ControlSettings").reset_to_defaults()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_node_ready(): release_controls()

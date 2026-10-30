@@ -3,9 +3,9 @@
 [ext_resource type="Script" path="res://scripts/NarrativeLayer.gd" id="1"]
 
 [sub_resource type="StyleBoxFlat" id="PanelStyle"]
-bg_color = Color(0.035, 0.045, 0.055, 0.94)
+bg_color = Color(0.035, 0.045, 0.055, 0.76)
 border_width_left = 2
-border_color = Color(0.55, 0.42, 0.27, 0.85)
+border_color = Color(0.55, 0.42, 0.27, 0.68)
 corner_radius_top_right = 5
 corner_radius_bottom_right = 5
 
