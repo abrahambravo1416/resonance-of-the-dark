@@ -122,3 +122,66 @@ Sistema dinámico de vibración localizado en `Player.gd` para enfatizar las acc
 * **Head Bobbing & Weight:** Balanceo sinusoidal de cámara en ejes X/Y y rotación Z (`walk_step_frequency: 12.0`, `run_step_frequency: 16.0`) para eliminar la sensación de flotación al desplazarse.
 * **Mecánica de Escondite:** Reducción/bloqueo parcial de vista, temporizador en HUD (*Aguantando la respiración: 5...*) e inmunidad temporal ante enemigos.
 * **Transiciones y Menús:** Soporte de salto directo de pantallas intermadias mediante la tecla `ENTER`.
+
+
+## 📱 Adaptación a Dispositivos Móviles (Práctica 6)
+
+[Repositorio público: rama `practica-6`](https://github.com/abrahambravo1416/resonance-of-the-dark/tree/practica-6), continuada desde `main` (`fe6db5c`), con los guardados, cuentas, puntuaciones, SQLite, recorridos y panel web existentes. La capa de entrada unificada envía movimiento, cámara y acciones al **Input Map**. Teclado, gamepad y táctil conviven: soltar el joystick conserva una tecla o un stick físico que siga pulsado. El personaje conserva sus ventanas de **Input Buffering y Coyote Time de 0,15 s**, screenshake y feedback.
+
+### Parámetros de Configuración Táctil
+
+| Parámetro | Valor de referencia | Configuración implementada |
+| :--- | :--- | :--- |
+| Radio del joystick | 80–120 px | 100 px por defecto, escalable |
+| Zona muerta | 0.15–0.25 | 0.20, ajustable entre 0.15 y 0.25 |
+| Tamaño mínimo de botones de acción | ≥ 96 px | 108 × 108 px; mínimo ajustable 97.2 px |
+| Opacidad | 0.4–0.7 | 0.55, ajustable |
+| Duración de vibración | 30–80 ms | 40 ms acción/recolección, 70 ms daño |
+| Orientación y stretch | Landscape, canvas_items + expand | Landscape, `canvas_items`, `expand`, referencia 1280 × 720 |
+
+Son píxeles lógicos del viewport; su tamaño físico depende de la pantalla. El ajuste **Tamaño** permite compensarlo. La equivalencia a 9 mm y la vibración requieren comprobación en el dispositivo final.
+
+### Uso y escenas editables
+
+- Pulgar izquierdo: joystick inferior izquierdo. Pulgar derecho: deslizar en la zona central derecha para mirar; **Saltar**, **Correr** y **Agachar** en la esquina inferior derecha. **Pausa** arriba.
+- **Interacción dinámica estilo Minecraft PE:** un botón contextual muestra la acción disponible: esconderse/salir, recoger, encender altar, llevar restos o hablar/recordar. El portón abierto se cruza caminando, como antes.
+- **Multitouch:** cada dedo mantiene su índice hasta liberarse, incluso si sale del área. Movimiento, cámara y botones son independientes. Pausar, ocultar el HUD o perder foco libera la entrada virtual.
+- **Safe area:** los márgenes físicos de `DisplayServer.get_display_safe_area()` se convierten a coordenadas del viewport al cambiar de tamaño. El radar se sitúa por encima del joystick.
+- **Ajustes:** botón **Controles**, disponible desde el menú y el HUD. Opacidad, tamaño, zona muerta y vibración se guardan en `user://touch_controls.cfg`, independiente de las partidas y cuentas.
+- **Depuración en PC:** activa **Probar táctil en PC** en Controles, o ejecuta con `RESONANCE_TOUCH_DEBUG=1`. Se comprueba `OS.has_feature("debug")`; una exportación PC normal mantiene oculto el HUD. `Emulate Touch From Mouse` está habilitado. [Godot también considera la emulación como disponibilidad táctil](https://docs.godotengine.org/en/stable/classes/class_displayserver.html#class-displayserver-method-is-touchscreen-available); se distingue del dispositivo físico para que el HUD siga oculto en PC hasta activar la prueba. Un mouse representa un dedo; las pruebas automatizadas inyectan índices separados para verificar multitouch.
+- Gamepad: stick izquierdo mueve, derecho mira; A salta, LB corre, B agacha, X recoge, Y esconde, Start pausa. Cruceta: arriba narrativa, izquierda altar, abajo curación, derecha restos.
+
+Los archivos principales son `scripts/VirtualJoystick.gd`, `scripts/TouchHUD.gd`, `scripts/UnifiedInput.gd`, `scripts/ControlSettings.gd` y `scenes/ui/TouchHUD.tscn`. Los botones son nodos `TouchScreenButton` editables; sus acciones son `ui_accept`, `sprint`, `crouch`, `ui_cancel` y la interacción correspondiente. `VirtualJoystick` también funciona de forma independiente, usando directamente `Input.action_press/action_release` si no existe el mezclador.
+
+### Limitaciones y acceso a la interfaz web desde móviles
+
+En la computadora que guarda SQLite ejecuta:
+
+```sh
+python3 telemetry/server.py --host 0.0.0.0 --port 8765
+```
+
+Desde un teléfono de la misma red abre `http://IP_DE_LA_COMPUTADORA:8765`. La opción anterior permite a los equipos de esa red consultar el archivo de partidas, sin autenticación; úsala en una red de confianza. El inicio normal sigue escuchando solo en `127.0.0.1`. El firewall y el aislamiento entre clientes del Wi-Fi pueden impedir el acceso.
+
+En el celular, `localhost` identifica al propio teléfono. El juego móvil no intenta arrancar Python: conserva el diario en `user://telemetry/spool`. Para verlo en SQLite debes copiar esos diarios a la computadora o usar la sincronización remota existente, cuando esté configurada. Las cuentas y guardados remotos siguen necesitando conectividad. Esta adaptación no cambia sus credenciales ni servicios.
+
+En pantallas estrechas la tabla de comparación de intentos usa desplazamiento horizontal. La clasificación y los datos remotos dependen del servicio ya configurado; las pruebas de esta entrega no iniciaron sesión ni escribieron en cuentas reales.
+
+### Evidencias y verificación
+
+- [Controles en juego](capturas/practica-6/controles.png)
+- [Menú de ajustes](capturas/practica-6/ajustes.png)
+- [HUD móvil](capturas/practica-6/hud-movil.png)
+- [Video de demostración](capturas/practica-6/demo-tactil.mp4)
+
+**Entorno verificado:** Godot 4.7.2 en macOS, eventos táctiles emulados con índices independientes. No había un Android conectado ni un emulador Android instalado. El video está grabado en PC e incluye la demostración y la prueba de buffer/coyote; no representa una ejecución en un teléfono. La ergonomía física, vibración, teclado del sistema y rendimiento en Android/iOS quedan pendientes de dispositivo real. No se entrega APK: en este equipo solo estaban instaladas las plantillas de exportación Web.
+
+```sh
+RESONANCE_CAPTURE=1 RESONANCE_DISABLE_WEB=1 godot --headless --path . --script tests/mobile_controls.gd
+python3 -m unittest discover -s telemetry -p 'test_*.py' -v
+node --test telemetry/test_replay.js
+```
+
+La prueba táctil comprueba zona muerta, multitouch, liberación fuera del área, buffer y coyote en una plataforma física, cámara, teclado simultáneo, safe area, contexto, pausa, persistencia de ajustes, progreso, puntuación y screenshake. Usa un perfil Godot separado al ejecutarla (duplica el proyecto y cambia temporalmente `application/config/name` en `project.godot` antes de abrir la copia): modifica únicamente el estado de la partida de prueba y escribe su configuración de prueba en `user://mobile_test_controls.cfg` (o la ruta de `RESONANCE_CONTROL_CONFIG`). Para volver a grabar las evidencias, usa `tools/capture_mobile.gd` con `--write-movie` y `--fixed-fps 30`; `RESONANCE_MOBILE_VIDEO=1` añade la plataforma visual de prueba. `RESONANCE_CAPTURE_DIR` selecciona la carpeta de capturas (por defecto, `user://mobile_captures`).
+
+Resultados locales: **27 comprobaciones táctiles**, **40 de escondite/cámara**, **14 pruebas Python de SQLite/HTTP** y **8 de reproducción JavaScript**, sin fallos. Las escenas de los cuatro niveles y sus reglas se conservan.

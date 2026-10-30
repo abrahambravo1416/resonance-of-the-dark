@@ -514,7 +514,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description="Archivo local de partidas de Resonance of the Dark")
-    parser.add_argument("--host", choices=("127.0.0.1", "localhost"), default="127.0.0.1")
+    parser.add_argument("--host", choices=("127.0.0.1", "localhost", "0.0.0.0"), default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data", help="Directorio SQLite y spool (por defecto telemetry/data)")
     parser.add_argument("--spool-dir", type=Path, help="Lee los JSONL de esta carpeta; útil para el user:// de una exportación")

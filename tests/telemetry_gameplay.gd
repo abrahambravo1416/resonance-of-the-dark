@@ -34,10 +34,12 @@ func _run() -> void:
 	var path: String = logger.log_path
 	var session: String = logger.session_id
 	var starting_position := player.global_position
-	Input.action_press("move_forward")
+	var move := InputEventKey.new()
+	move.physical_keycode = KEY_W; move.pressed = true
+	Input.parse_input_event(move)
 	for tick in range(66):
 		await physics_frame
-	Input.action_release("move_forward")
+	move.pressed = false; Input.parse_input_event(move)
 	check(player.global_position.distance_to(starting_position) > 1.0, "Movimiento real con entrada WASD")
 	var health_before: int = player.current_health
 	player.take_damage(1)
