@@ -279,6 +279,8 @@ func _spool_directory() -> String:
 
 
 func _start_local_dashboard() -> void:
+	if OS.get_name() in ["Android", "iOS", "Web"]:
+		return
 	if _web_started or not launch_local_dashboard or OS.get_environment("RESONANCE_DISABLE_WEB") == "1":
 		return
 	var server := ProjectSettings.globalize_path("res://telemetry/server.py")

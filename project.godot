@@ -18,6 +18,10 @@ config/windows_native_icon="res://icon.ico"
 
 [autoload]
 
+ControlSettings="*res://scripts/ControlSettings.gd"
+UnifiedInput="*res://scripts/UnifiedInput.gd"
+TouchHUD="*res://scenes/ui/TouchHUD.tscn"
+
 LevelManager="*res://scenes/ui/LevelManager.tscn"
 GameManager="*res://scripts/GameManager.gd"
 GameplayLog="*res://scenes/systems/GameplayLog.tscn"
@@ -25,6 +29,10 @@ CloudAccount="*res://scripts/CloudAccount.gd"
 _mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
 
 [display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=0
 
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
@@ -46,3 +54,8 @@ enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+pointing/emulate_mouse_from_touch=true

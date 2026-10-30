@@ -82,7 +82,13 @@ func _run() -> void:
 	var mouse := InputEventMouseMotion.new()
 	mouse.relative = Vector2(8, -10)
 	var pitch_before := player._pitch
-	player._unhandled_input(mouse)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Headless has no captured OS cursor; inject at the pointer adapter boundary.
+	if DisplayServer.get_name() == "headless":
+		root.get_node("UnifiedInput").mouse_delta += mouse.relative
+	else:
+		Input.parse_input_event(mouse)
+	for frame in range(4): await physics_frame
 	check(player._pitch > pitch_before, "Mouse look remains responsive while hiding")
 	check(is_equal_approx(player.camera.rotation.x, player._pitch + player.hiding_motion.rotation.x), "Look angle composes with hiding animation")
 	player._shake_camera()
@@ -123,10 +129,12 @@ func _run() -> void:
 	await face_cover()
 	press_hide()
 	await wait_seconds(0.2)
-	Input.action_press("move_back")
+	var move := InputEventKey.new()
+	move.physical_keycode = KEY_S; move.pressed = true
+	Input.parse_input_event(move)
 	await physics_frame
 	await physics_frame
-	Input.action_release("move_back")
+	move.pressed = false; Input.parse_input_event(move)
 	check(not player.is_hiding, "Original WASD movement exits hiding")
 	await wait_seconds(0.45)
 	# Natural timeout, not an artificial end call, retains the five second rule.

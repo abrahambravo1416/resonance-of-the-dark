@@ -19,6 +19,9 @@ var _greeted: bool = false
 
 
 func _ready() -> void:
+	var key_event := InputEventKey.new()
+	key_event.physical_keycode = interaction_key
+	if not InputMap.action_has_event("narrative_interact", key_event): InputMap.action_add_event("narrative_interact", key_event)
 	panel.hide()
 	hint.hide()
 	add_to_group("narrative_layers")
@@ -150,7 +153,11 @@ func _process(delta: float) -> void:
 		return
 	if not _greeted:
 		_greeted = true
-		show_message("Ecos del cementerio", greeting, 6.0)
+		var touch_hud := get_node_or_null("/root/TouchHUD")
+		var introduction := greeting
+		if touch_hud != null and touch_hud._enabled():
+			introduction = "Una voz te espera junto a la entrada. Acércate y toca Hablar para escuchar su historia."
+		show_message("Ecos del cementerio", introduction, 6.0)
 	_remaining = maxf(0.0, _remaining - delta)
 	if _remaining == 0.0:
 		panel.hide()
@@ -172,9 +179,9 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not event is InputEventKey or not event.pressed or event.echo:
+	if not event.is_action_pressed("narrative_interact") or event.is_echo():
 		return
-	if event.physical_keycode != interaction_key or _nearest == null:
+	if _nearest == null:
 		return
 	var player := get_tree().get_first_node_in_group("player") as Node3D
 	if player == null or bool(player.get("controls_frozen")) or bool(player.get("is_dead")):

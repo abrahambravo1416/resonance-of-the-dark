@@ -948,10 +948,6 @@ func _on_transition_skip_requested() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if controls_frozen or _cover_transition_active:
 		return
-	if event is InputEventMouseMotion and camera != null:
-		rotate_y(-event.relative.x * mouse_sensitivity)
-		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity, deg_to_rad(-85.0), deg_to_rad(85.0))
-		_apply_camera_pose()
 	if event.is_action_pressed("ritual_interact"):
 		_try_light_nearby_altar()
 	if event.is_action_pressed("absolute_ritual_interact"):
@@ -1081,6 +1077,13 @@ func _hide_pumpkin_lock_message() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if not controls_frozen and not _cover_transition_active:
+		var look_input := Vector2(Input.get_action_strength("look_right") - Input.get_action_strength("look_left"), Input.get_action_strength("look_down") - Input.get_action_strength("look_up"))
+		var pointer_input := Vector2(Input.get_action_strength("look_pointer_right") - Input.get_action_strength("look_pointer_left"), Input.get_action_strength("look_pointer_down") - Input.get_action_strength("look_pointer_up"))
+		var look_angle := look_input * 2.4 * delta + pointer_input * 4096.0 * mouse_sensitivity
+		rotate_y(-look_angle.x)
+		_pitch = clampf(_pitch - look_angle.y, deg_to_rad(-85), deg_to_rad(85))
+		_apply_camera_pose()
 	if Input.is_action_just_pressed("jump") or Input.is_action_just_pressed("ui_accept"):
 		jump_buffer_timer = jump_buffer_time
 	jump_buffer_timer = maxf(0.0, jump_buffer_timer - delta)
@@ -1103,7 +1106,7 @@ func _physics_process(delta: float) -> void:
 		wants_to_crouch = false
 	_update_crouch_state(wants_to_crouch)
 
-	var input_vector := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var input_vector := Input.get_vector("move_left", "move_right", "move_forward", "move_back", 0.0)
 	if is_hiding:
 		if input_vector.length_squared() > 0.01:
 			_set_hiding(false, null, true)
@@ -1120,7 +1123,7 @@ func _physics_process(delta: float) -> void:
 	var move_direction := transform.basis.x * input_vector.x
 	move_direction += -transform.basis.z * forward_strength
 	move_direction += transform.basis.z * backward_strength
-	move_direction = move_direction.normalized()
+	move_direction = move_direction.limit_length(1.0)
 	var has_movement_input: bool = input_vector.length_squared() > 0.0
 	var sprint_requested: bool = Input.is_action_pressed("sprint")
 	var can_sprint_while_carrying: bool = is_carrying_absolute_ritual_relic and _is_any_enemy_chasing()
@@ -2102,6 +2105,23 @@ func _bind_authored_nodes(node: Node) -> void:
 
 
 func _log(kind: String, data: Dictionary = {}) -> void:
+	if kind in ["item_collected", "pumpkin_collected", "relic_picked_up"]:
+		var controls := get_node_or_null("/root/ControlSettings")
+		if controls != null: controls.haptic(40)
 	var logger := get_node_or_null("/root/GameplayLog")
 	if logger != null:
 		logger.call("record", kind, data, global_position, current_level_number)
+
+
+func get_touch_interaction() -> Dictionary:
+	_update_interaction_prompt()
+	if _interaction_prompt != null and _interaction_prompt.visible:
+		var text := _interaction_prompt.text
+		for pair in [["[E]", "hide_interact"], ["[F]", "interact"], ["[Q]", "ritual_interact"], ["[R]", "health_skull_interact"], ["[T]", "absolute_ritual_interact"]]:
+			if text.begins_with(pair[0]):
+				return {"action": pair[1], "text": text.trim_prefix(pair[0]).strip_edges().replace("Esconderse detrás del objeto", "Esconderse")}
+	if interaction_ray != null:
+		interaction_ray.force_raycast_update()
+		if interaction_ray.is_colliding() and interaction_ray.get_collider().has_method("interact"):
+			return {"action": "interact", "text": "Recoger"}
+	return {}
