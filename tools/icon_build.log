@@ -1,0 +1,45 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+TextServer: Added interface "Dummy"
+TextServer: Added interface "ICU / HarfBuzz / Graphite (Built-in)"
+Using "default" pen tablet driver...
+
+TextServer: Primary interface set to: "ICU / HarfBuzz / Graphite (Built-in)".
+CORE API HASH: 2004498165
+EDITOR API HASH: 1696660745
+Loading resource: res://tools/generate_android_icons.gd remapped: res://tools/generate_android_icons.gd
+Completed load for: 'res://tools/generate_android_icons.gd' remapped 'res://tools/generate_android_icons.gd' at thread -1
+SceneTreeFTI: traversal method DEFAULT
+Loading resource: res://scripts/ControlSettings.gd remapped: res://scripts/ControlSettings.gd
+Completed load for: 'res://scripts/ControlSettings.gd' remapped 'res://scripts/ControlSettings.gd' at thread -1
+Loading resource: res://scripts/UnifiedInput.gd remapped: res://scripts/UnifiedInput.gd
+Completed load for: 'res://scripts/UnifiedInput.gd' remapped 'res://scripts/UnifiedInput.gd' at thread -1
+Loading resource: res://scenes/ui/TouchHUD.tscn remapped: res://scenes/ui/TouchHUD.tscn
+Loading resource: res://scripts/TouchHUD.gd remapped: res://scripts/TouchHUD.gd
+Completed load for: 'res://scripts/TouchHUD.gd' remapped 'res://scripts/TouchHUD.gd' at thread -1
+Loading resource: res://scripts/VirtualJoystick.gd remapped: res://scripts/VirtualJoystick.gd
+Completed load for: 'res://scripts/VirtualJoystick.gd' remapped 'res://scripts/VirtualJoystick.gd' at thread -1
+Loading resource: res://scripts/TouchAction.gd remapped: res://scripts/TouchAction.gd
+Completed load for: 'res://scripts/TouchAction.gd' remapped 'res://scripts/TouchAction.gd' at thread -1
+Loading resource: res://scripts/TouchLook.gd remapped: res://scripts/TouchLook.gd
+Completed load for: 'res://scripts/TouchLook.gd' remapped 'res://scripts/TouchLook.gd' at thread -1
+Completed load for: 'res://scenes/ui/TouchHUD.tscn' remapped 'res://scenes/ui/TouchHUD.tscn' at thread -1
+Loading resource: res://scenes/ui/LevelManager.tscn remapped: res://scenes/ui/LevelManager.tscn
+Loading resource: res://scripts/LevelManager.gd remapped: res://scripts/LevelManager.gd
+Completed load for: 'res://scripts/LevelManager.gd' remapped 'res://scripts/LevelManager.gd' at thread -1
+Completed load for: 'res://scenes/ui/LevelManager.tscn' remapped 'res://scenes/ui/LevelManager.tscn' at thread -1
+Loading resource: res://scripts/GameManager.gd remapped: res://scripts/GameManager.gd
+Completed load for: 'res://scripts/GameManager.gd' remapped 'res://scripts/GameManager.gd' at thread -1
+Loading resource: res://scenes/systems/GameplayLog.tscn remapped: res://scenes/systems/GameplayLog.tscn
+Loading resource: res://scripts/GameplayLog.gd remapped: res://scripts/GameplayLog.gd
+Completed load for: 'res://scripts/GameplayLog.gd' remapped 'res://scripts/GameplayLog.gd' at thread -1
+Completed load for: 'res://scenes/systems/GameplayLog.tscn' remapped 'res://scenes/systems/GameplayLog.tscn' at thread -1
+Loading resource: res://scripts/CloudAccount.gd remapped: res://scripts/CloudAccount.gd
+Completed load for: 'res://scripts/CloudAccount.gd' remapped 'res://scripts/CloudAccount.gd' at thread -1
+Loading resource: res://addons/godot_ai/runtime/game_helper.gd remapped: res://addons/godot_ai/runtime/game_helper.gd
+Completed load for: 'res://addons/godot_ai/runtime/game_helper.gd' remapped 'res://addons/godot_ai/runtime/game_helper.gd' at thread -1
+Loaded system CA certificates
+Icono generado: res://assets/ui/launcher_main_192.png
+Icono generado: res://assets/ui/launcher_adaptive_foreground_432.png
+Icono generado: res://assets/ui/launcher_adaptive_background_432.png
+Icono generado: res://assets/ui/launcher_adaptive_monochrome_432.png
+[godot_ai game_helper] registered mcp capture (debugger active=false, logger=true)

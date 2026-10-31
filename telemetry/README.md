@@ -54,6 +54,12 @@ El código, la página y el esquema están en el repositorio. La base y los diar
 
 El juego escribe y vacía el diario a disco después de cada evento. Cada sesión registra la plataforma (`PC`, `Móvil` o `Desconocido` en registros antiguos). No necesita que la web esté abierta. El importador revisa los archivos cada segundo y antes de una consulta; importa cada `event_id` una sola vez. Si la última línea aún se está escribiendo, espera hasta recibir su salto de línea. Registros inválidos se cuentan y se omiten sin bloquear los demás. Los archivos JSONL deben tratarse como diarios de solo anexado.
 
+### Sincronización central y parámetros actuales
+
+La configuración activa está en `scenes/systems/GameplayLog.tscn`: las posiciones se muestrean cada **0,5 s**, con una distancia mínima de **0,12 m** para aceptar una nueva muestra del jugador. La función de Supabase intenta enviar los diarios pendientes cada **15 s**, en lotes de hasta **50 eventos**. Si la petición falla o no hay red, los eventos siguen en `user://telemetry/spool` y se reintentan; un `HTTP 2xx` confirma el avance del punto de lectura. Por eso puede haber retraso entre jugar y ver la fila en la base central.
+
+El juego cliente contiene únicamente la URL HTTPS de `ingest-gameplay` y la clave **publishable**. Nunca se debe incluir una clave `secret` o `service_role` en el proyecto ni en la APK. La página local importa los mismos diarios a SQLite como respaldo independiente de Supabase.
+
 Las tablas de telemetría (`game_sessions`, `game_events`) guardan **el historial para consulta**, no una partida guardada para reanudar el estado del juego. El progreso de las cuentas y sus tres espacios se conserva por separado en `public.game_account_saves`, mediante IDs y contraseñas validados en una Edge Function.
 
 En una exportación del juego, Godot puede guardar el diario en `user://telemetry/spool`. Para consultar esa carpeta desde este proyecto:

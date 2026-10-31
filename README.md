@@ -34,7 +34,7 @@ Al esconderte, el marcador del jugador cambia a azul y muestra **OCULTO**. La ba
 
 Si se cierra el juego abruptamente, las entradas ya escritas permanecen y la web muestra la sesión como inactiva cuando deja de recibir datos. El registro describe lo ocurrido; **no es un sistema para continuar una partida guardada**.
 
-Todo se encuentra dentro de esta carpeta del repositorio. El código, escenas y esquema se versionan; los diarios personales, la SQLite y sus archivos auxiliares están excluidos mediante `.gitignore`. Puedes respaldar `telemetry/data/` para conservar el historial. No hay envíos a un servicio externo de analítica del juego: este archivo escucha solamente en el equipo local.
+El código, las escenas y el esquema se versionan; los diarios personales y la SQLite local están excluidos mediante `.gitignore`. La copia local del panel escucha en este equipo y sirve como respaldo. Además, el juego sincroniza eventos con la Edge Function de Supabase configurada en `GameplayLog.tscn`: intenta subirlos cada 15 segundos, en lotes de hasta 50 eventos. Si la red falla, mantiene los diarios locales y vuelve a intentar el envío. El historial central y las cuentas/partidas guardadas son funciones distintas; las partidas registradas no se pueden reanudar desde el diario.
 
 Una exportación empaquetada escribe su diario en `user://telemetry/spool`, porque `res://` deja de ser una carpeta modificable. Para consultarla, ejecuta el servidor de este repositorio con `--spool-dir "ruta/al/spool"`. En el proyecto abierto desde Godot se usa siempre la carpeta `telemetry/data/spool`.
 
@@ -135,9 +135,11 @@ Sistema dinámico de vibración localizado en `Player.gd` para enfatizar las acc
 | Radio del joystick | 80–120 px | 100 px por defecto, escalable |
 | Zona muerta del joystick | 0.05–0.35 | 0.15 por defecto, ajustable |
 | Tamaño mínimo de botones de acción | ≥ 96 px | 108 × 108 px; mínimo ajustable 97.2 px |
-| Tamaño de controles | 90–150% | 90% por defecto, ajustable |
+| Tamaño de controles | 90–150% | 100% por defecto, ajustable |
 | Opacidad | 10–100% | 40% por defecto, ajustable |
-| Duración de vibración | 30–80 ms | 40 ms acción/recolección, 70 ms daño |
+| Velocidad de giro táctil | 50–200% | 130% por defecto, ajustable |
+| Vibración común | Un pulso corto | 120 ms efectivos para pausa, recolección, altar y daño |
+| Vibración intensa | Patrón de varios pulsos | 3 pulsos de 240 ms al morir o completar el nivel |
 | Orientación y stretch | Landscape, canvas_items + expand | Landscape, `canvas_items`, `expand`, referencia 1280 × 720 |
 
 Son píxeles lógicos del viewport; su tamaño físico depende de la pantalla. El ajuste **Tamaño** permite compensarlo. La equivalencia a 9 mm y la vibración requieren comprobación en el dispositivo final.
@@ -149,7 +151,7 @@ Son píxeles lógicos del viewport; su tamaño físico depende de la pantalla. E
 - **Multitouch:** cada dedo mantiene su índice hasta liberarse, incluso si sale del área. Movimiento, cámara y botones son independientes. Pausar, ocultar el HUD o perder foco libera la entrada virtual.
 - **Safe area:** los márgenes físicos de `DisplayServer.get_display_safe_area()` se convierten a coordenadas del viewport al cambiar de tamaño. El radar se sitúa por encima del joystick.
 - **Ajustes:** botón **Controles** en el menú principal o dentro del menú de pausa. Opacidad, tamaño, zona muerta, velocidad de giro táctil (50–200%) y vibración se guardan en `user://touch_controls.cfg`; **Restablecer predeterminado** recupera el perfil inicial (40% de opacidad, 100% de tamaño, 130% de giro y zona muerta 0.15).
-- **Vibración:** el botón **Probar vibración** envía un pulso de prueba; también vibra al pulsar Saltar/Correr/Agachar/Pausa, recoger objetos o restos, encender un altar, recibir daño y recuperar vida. El preset Android debe incluir el permiso `VIBRATE`; el APK debe exportarse de nuevo para incluir cambios de permisos.
+- **Vibración:** **Probar** envía tres pulsos de 240 ms. En juego se solicita un pulso común en pausa, al recoger objetos/restos o cráneos, encender un altar y recibir daño; morir o escapar usa tres pulsos intensos. El script limita los pulsos comunes a 120 ms y los intensos a 240 ms, con amplitud máxima solicitada. El preset Android actual incluye `VIBRATE`; hay que volver a exportar e instalar el APK tras cambiar permisos. La sensación final depende del motor háptico y los ajustes del teléfono.
 - **Depuración en PC:** activa **Probar táctil en PC** en Controles durante una ejecución de depuración, o usa `RESONANCE_TOUCH_DEBUG=1`. El ajuste está desactivado por defecto y el botón **Restablecer predeterminado** vuelve a desactivarlo. `Emulate Touch From Mouse` está habilitado. [Godot también considera la emulación como disponibilidad táctil](https://docs.godotengine.org/en/stable/classes/class_displayserver.html#class-displayserver-method-is-touchscreen-available); se distingue del dispositivo físico para que el HUD siga oculto en PC sin activar la prueba. Un mouse representa un dedo; las pruebas automatizadas inyectan índices separados para verificar multitouch.
 - Gamepad: stick izquierdo mueve, derecho mira; A salta, LB corre, B agacha, X recoge, Y esconde, Start pausa. Cruceta: arriba narrativa, izquierda altar, abajo curación, derecha restos.
 
@@ -176,7 +178,7 @@ En pantallas estrechas la tabla de comparación de intentos usa desplazamiento h
 - [HUD móvil](capturas/practica-6/hud-movil.png)
 - [Video de demostración](capturas/practica-6/demo-tactil.mp4)
 
-**Entorno verificado:** Godot 4.7.2 en macOS, eventos táctiles emulados con índices independientes. No había un Android conectado ni un emulador Android instalado. El video está grabado en PC e incluye la demostración y la prueba de buffer/coyote; no representa una ejecución en un teléfono. La ergonomía física, vibración, teclado del sistema y rendimiento en Android/iOS quedan pendientes de dispositivo real. No se entrega APK: en este equipo solo estaban instaladas las plantillas de exportación Web.
+**Entorno verificado:** Godot 4.7.2 en Windows; controles táctiles y multitouch también se comprueban con pruebas automatizadas. Se exportó e instaló una APK en un Samsung SM-S938B y se verificó que las sesiones móviles llegaran a Supabase con plataforma `mobile`. La vibración está implementada y el preset declara `VIBRATE`, pero no se considera validada como perceptible de forma consistente: compruébala con **Probar** y con los ajustes hápticos del teléfono. El APK se genera localmente desde el preset Android y no se incluye en el repositorio.
 
 ```sh
 RESONANCE_CAPTURE=1 RESONANCE_DISABLE_WEB=1 godot --headless --path . --script tests/mobile_controls.gd
