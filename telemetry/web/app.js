@@ -39,6 +39,7 @@ const label = kind => labels[kind] || kind.replaceAll("_", " ").replace(/^./, c 
 const date = stamp => new Date(stamp*1000);
 const formatDate = stamp => date(stamp).toLocaleDateString("es-MX", {day:"2-digit",month:"short",year:"numeric"});
 const formatHour = stamp => date(stamp).toLocaleTimeString("es-MX", {hour:"2-digit",minute:"2-digit",hour12:false});
+const platformName = value => value === "pc" ? "PC" : value === "mobile" ? "Móvil" : "Desconocido";
 function clock(seconds){const n=Math.max(0,Math.floor(seconds));return n>=3600?`${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`:`${String(Math.floor(n/60)).padStart(2,"0")}:${String(n%60).padStart(2,"0")}`;}
 function duration(seconds){return seconds>=3600?`${Math.floor(seconds/3600)} h ${Math.floor(seconds/60)%60} min`:seconds>=60?`${Math.floor(seconds/60)} min ${Math.floor(seconds)%60} s`:`${Math.floor(seconds)} s`;}
 const getAttempt = event => String(event.data?.attempt ?? 0);
@@ -106,13 +107,19 @@ function renderSessions(){
   const knownPlayers=new Set(state.sessions.map(item=>item.player_id).filter(Boolean));
   $("player-count").textContent=`${knownPlayers.size} ${knownPlayers.size===1?"instalación reconocida":"instalaciones reconocidas"}`;
   const query=$("search").value.trim().toLocaleLowerCase();
-  const sessions=state.sessions.filter(item=>`${item.player_name} ${item.player_id||""} ${item.session_id} ${formatDate(item.started_at)}`.toLocaleLowerCase().includes(query));
+  const platformFilter=$("platform-filter").value;
+  const sessions=state.sessions.filter(item=>{
+    const platform=item.platform||"unknown";
+    const matchesPlatform=platformFilter==="all"||platform===platformFilter;
+    const searchable=`${item.player_name} ${item.player_id||""} ${item.session_id} ${formatDate(item.started_at)} ${platformName(platform)}`.toLocaleLowerCase();
+    return matchesPlatform&&searchable.includes(query);
+  });
   const fragment=document.createDocumentFragment();
   for(const session of sessions){
     const button=node("button",`session-card${session.session_id===state.selected?" selected":""}`);button.type="button";button.setAttribute("aria-pressed",String(session.session_id===state.selected));
     const top=node("span","card-top");top.append(node("span",null,formatDate(session.started_at)),node("span",`status-dot ${session.status}`,session.status==="active"?"● En curso":session.status==="finished"?"Finalizada":"Sin actividad"));
     const playerTag=session.player_id?`Jugador ${session.player_id.slice(0,8)}`:"Jugador antiguo";
-    button.append(top,node("strong",null,session.player_name||"Explorador"),node("small",null,`${playerTag} · ${formatHour(session.started_at)} · ${duration(session.duration)} · ${session.action_count} acciones`));
+    button.append(top,node("span",`device-chip ${session.platform||"unknown"}`,platformName(session.platform)),node("strong",null,session.player_name||"Explorador"),node("small",null,`${playerTag} · ${formatHour(session.started_at)} · ${duration(session.duration)} · ${session.action_count} acciones`));
     button.addEventListener("click",async()=>{state.selected=session.session_id;state.record=null;state.playing=false;state.followEnd=true;state.shown=100;renderSessions();try{await loadSelected(true);}catch(error){showError(error.message);}});
     fragment.append(button);
   }
@@ -164,6 +171,7 @@ async function loadSelected(reset){
   $("session-status").className=`badge ${s.status}`;
   $("duration").textContent=duration(s.duration);$("distance").textContent=`${s.distance.toLocaleString("es-MX",{maximumFractionDigits:1})} m`;
   $("actions").textContent=s.action_count.toLocaleString("es-MX");$("levels").textContent=String(s.level_count);
+  $("session-platform").textContent=platformName(s.platform);
   renderSessionOutcome(s,result.events);
   renderObjectiveProgress(result.events);
   if(shouldLoadComparison)requestComparison();
@@ -609,7 +617,7 @@ async function initializeArchive(){
   }
 }
 
-$("refresh").addEventListener("click",refresh);$("search").addEventListener("input",renderSessions);
+$("refresh").addEventListener("click",refresh);$("search").addEventListener("input",renderSessions);$("platform-filter").addEventListener("change",renderSessions);
 $("login-form").addEventListener("submit",signIn);$("logout").addEventListener("click",signOut);$("export").addEventListener("click",downloadTeamCsv);
 $("level").addEventListener("change",()=>{fillAttempts(true);state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});
 $("attempt").addEventListener("change",()=>{state.shown=100;state.zoom=1;state.pan={x:0,y:0};renderTimeline();drawMap();});

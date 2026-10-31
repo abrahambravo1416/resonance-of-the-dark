@@ -98,6 +98,8 @@ class Archive:
             session_columns = {row["name"] for row in db.execute("PRAGMA table_info(sessions)")}
             if "player_id" not in session_columns:
                 db.execute("ALTER TABLE sessions ADD COLUMN player_id TEXT")
+            if "platform" not in session_columns:
+                db.execute("ALTER TABLE sessions ADD COLUMN platform TEXT NOT NULL DEFAULT 'unknown'")
             db.commit()
 
     def connect(self):
@@ -152,7 +154,10 @@ class Archive:
                             db.execute("UPDATE sessions SET started_at=MIN(started_at,?),last_seen=MAX(last_seen,?) WHERE session_id=?", (ts, ts, session_id))
                             data = json.loads(data_json)
                             if kind == "session_started":
-                                db.execute("UPDATE sessions SET player_id=?,player_name=?,game_version=? WHERE session_id=?", (str(data.get("player_id", ""))[:100] or None, str(data.get("player_name", ""))[:200], str(data.get("game_version", ""))[:100], session_id))
+                                platform = str(data.get("platform", "unknown")).lower()
+                                if platform not in ("pc", "mobile"):
+                                    platform = "unknown"
+                                db.execute("UPDATE sessions SET player_id=?,player_name=?,game_version=?,platform=? WHERE session_id=?", (str(data.get("player_id", ""))[:100] or None, str(data.get("player_name", ""))[:200], str(data.get("game_version", ""))[:100], platform, session_id))
                             elif kind == "session_ended":
                                 db.execute("UPDATE sessions SET ended_at=?,outcome=? WHERE session_id=?", (ts, str(data.get("outcome", "finished"))[:100], session_id))
                             imported += 1

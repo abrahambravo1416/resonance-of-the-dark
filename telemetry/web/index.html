@@ -37,6 +37,7 @@
       <h1>Huellas en la oscuridad.</h1>
       <p class="muted intro">Cada recorrido tiene una historia. Encuentra lo que ocurrió en el cementerio.</p>
       <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Buscar jugador o partida" aria-label="Buscar jugador o partida"></label>
+      <label class="sidebar-device-filter" for="platform-filter"><span>Dispositivo</span><select id="platform-filter"><option value="all">Todos los dispositivos</option><option value="pc">PC</option><option value="mobile">Móvil</option><option value="unknown">Desconocido</option></select></label>
       <div id="sessions" class="session-list" aria-live="polite"></div>
     </aside>
     <main id="main">
@@ -53,6 +54,7 @@
           <div class="metric"><span>Distancia recorrida</span><strong id="distance">—</strong><small>aproximación sobre el plano X/Z</small></div>
           <div class="metric"><span>Acciones registradas</span><strong id="actions">—</strong><small>sin contar muestras de posición</small></div>
           <div class="metric"><span>Niveles visitados</span><strong id="levels">—</strong><small>en esta sesión de juego</small></div>
+          <div class="metric device-metric"><span>Dispositivo</span><strong id="session-platform">Desconocido</strong><small>donde se jugó esta partida</small></div>
         </section>
         <section class="session-outcome panel" aria-labelledby="outcome-heading">
           <div class="panel-heading"><div><span class="eyebrow">CIERRE DE LA PARTIDA</span><h3 id="outcome-heading">Resultado del recorrido</h3></div><span id="outcome-badge" class="outcome-badge">En curso</span></div>

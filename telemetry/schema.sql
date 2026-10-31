@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     player_id TEXT,
     player_name TEXT NOT NULL DEFAULT '',
     game_version TEXT NOT NULL DEFAULT '',
+    platform TEXT NOT NULL DEFAULT 'unknown',
     started_at REAL NOT NULL,
     last_seen REAL NOT NULL,
     ended_at REAL,

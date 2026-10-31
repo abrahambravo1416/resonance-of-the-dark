@@ -34,7 +34,11 @@ En Godot, abre `scenes/systems/GameplayLog.tscn` y selecciona el nodo raíz `Gam
 
 Estos dos valores identifican un cliente público; la clave publishable no es un secreto. Al iniciar el juego, los JSONL pendientes de la carpeta local también se intentan sincronizar, así que el registro local acumulado puede subirse cuando configures el endpoint. Para que funcione en las copias que descarguen otras personas, exporta y distribuye una nueva versión del juego con esta configuración.
 
-La sincronización se ejecuta por lotes cada 15 segundos. Si falla la conexión, el avance de carga no se confirma y el mismo lote se reintenta. Las partidas permanecen en `user://telemetry/spool` hasta que el usuario borre los datos locales.
+La sincronización se intenta al comenzar una sesión, al entrar a un nivel, al cerrar la partida y por lotes cada 15 segundos mientras se juega. Si falla la conexión, el avance de carga no se confirma y el mismo lote se reintenta; el diario queda guardado localmente y se volverá a intentar cuando el juego se ejecute otra vez. Las partidas permanecen en `user://telemetry/spool` hasta que el usuario borre los datos locales.
+
+Cada sesión nueva incluye `platform` (`pc` o `mobile`). El panel muestra el dispositivo en una tarjeta y en cada partida, y permite filtrar por PC, Móvil o registros antiguos sin plataforma. Las sesiones existentes anteriores a esta versión aparecen como **Desconocido** porque la plataforma no se guardó en su momento. Para que las sesiones móviles puedan conectarse a Supabase, el preset Android del proyecto ya tiene activado el permiso **Internet**; vuelve a exportar e instalar el APK actualizado.
+
+La nueva migración `20261030000000_game_session_platform.sql` agrega la columna `game_sessions.platform` y la expone en `game_session_summary`. Aplícala desde la raíz del repositorio con `supabase db push`. Después sube los cambios del panel web a GitHub para publicar el filtro y la tarjeta de plataforma.
 
 ## 4. Iniciar automáticamente el panel de partidas central
 

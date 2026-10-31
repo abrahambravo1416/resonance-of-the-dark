@@ -37,6 +37,8 @@ var _upload_timer: Timer
 var _upload_offsets: Dictionary = {}
 var _pending_upload_offsets: Dictionary = {}
 var _upload_in_flight: bool = false
+var _upload_requested: bool = false
+var _drain_upload_queue: bool = false
 
 
 func _ready() -> void:
@@ -95,7 +97,8 @@ func start_session(requested_player_name: String = "") -> void:
 	_was_paused = false
 	_enemy_states.clear()
 	_enemy_names.clear()
-	record("session_started", {"player_id": player_id, "player_name": player_name, "game_version": "resonance-local-3", "position_interval_seconds": sample_interval, "enemy_position_interval_seconds": sample_interval})
+	record("session_started", {"player_id": player_id, "player_name": player_name, "game_version": "resonance-local-3", "platform": _platform_id(), "position_interval_seconds": sample_interval, "enemy_position_interval_seconds": sample_interval})
+	_upload_pending_logs()
 	_start_local_dashboard()
 
 
@@ -140,6 +143,8 @@ func end_session(outcome: String = "quit") -> void:
 	record("session_ended", {"outcome": outcome})
 	_file.close()
 	_file = null
+	_drain_upload_queue = true
+	_upload_pending_logs()
 	session_id = ""
 	current_level = 0
 
@@ -178,6 +183,7 @@ func set_level(level: int, metadata: Dictionary = {}) -> void:
 	_enemy_states.clear()
 	_enemy_names.clear()
 	record("level_started", metadata)
+	_upload_pending_logs()
 
 
 func observe_level(scene: Node) -> void:
@@ -304,7 +310,10 @@ func _start_local_dashboard() -> void:
 
 
 func _upload_pending_logs() -> void:
-	if not enabled or _upload_in_flight:
+	if not enabled:
+		return
+	if _upload_in_flight:
+		_upload_requested = true
 		return
 	var endpoint := _remote_endpoint()
 	var publishable_key := _remote_key()
@@ -351,6 +360,8 @@ func _upload_pending_logs() -> void:
 		# Avanza sobre líneas vacías/corruptas para no bloquear la cola local.
 		if not offsets_after_success.is_empty():
 			_commit_upload_offsets(offsets_after_success)
+		_drain_upload_queue = false
+		_upload_requested = false
 		return
 	_pending_upload_offsets = offsets_after_success
 	var body := JSON.stringify({"events": events})
@@ -368,8 +379,12 @@ func _upload_pending_logs() -> void:
 
 func _on_upload_completed(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 	_upload_in_flight = false
+	var upload_again := _upload_requested or _drain_upload_queue
+	_upload_requested = false
 	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
 		_commit_upload_offsets(_pending_upload_offsets)
+		if upload_again:
+			call_deferred("_upload_pending_logs")
 	else:
 		push_warning("La telemetría remota no respondió correctamente (HTTP %d). Se reintentará y el diario local permanece guardado." % response_code)
 	_pending_upload_offsets.clear()
@@ -383,6 +398,10 @@ func _remote_endpoint() -> String:
 func _remote_key() -> String:
 	var environment_value := OS.get_environment("RESONANCE_SUPABASE_PUBLISHABLE_KEY")
 	return environment_value if not environment_value.is_empty() else remote_publishable_key.strip_edges()
+
+
+func _platform_id() -> String:
+	return "mobile" if OS.get_name() in ["Android", "iOS"] else "pc"
 
 
 func _upload_state_path() -> String:
