@@ -31,6 +31,9 @@ func _toggle_pause() -> void:
 		get_tree().paused = true
 		_overlay.visible = true
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		var controls := get_node_or_null("/root/ControlSettings")
+		if controls != null:
+			controls.haptic(90)
 
 
 func _build_interface() -> void:

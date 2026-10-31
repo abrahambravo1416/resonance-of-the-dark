@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://c45wdgns51x3n"
 path.s3tc="res://.godot/imported/weapons_bits_texture.png-7a8552ca69ab97c6300884ed5894ea9d.s3tc.ctex"
+path.etc2="res://.godot/imported/weapons_bits_texture.png-7a8552ca69ab97c6300884ed5894ea9d.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/weapons/obj/weapons_bits_texture.png"
-dest_files=["res://.godot/imported/weapons_bits_texture.png-7a8552ca69ab97c6300884ed5894ea9d.s3tc.ctex"]
+dest_files=["res://.godot/imported/weapons_bits_texture.png-7a8552ca69ab97c6300884ed5894ea9d.s3tc.ctex", "res://.godot/imported/weapons_bits_texture.png-7a8552ca69ab97c6300884ed5894ea9d.etc2.ctex"]
 
 [params]
 

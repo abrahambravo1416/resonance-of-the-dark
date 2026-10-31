@@ -12,7 +12,6 @@ func _ready() -> void:
 
 func _pressed() -> void:
 	get_node("/root/UnifiedInput").set_virtual(str(get_instance_id()), action, 1.0)
-	get_node("/root/ControlSettings").haptic(40)
 	queue_redraw()
 
 func _released() -> void:

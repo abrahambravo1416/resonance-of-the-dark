@@ -817,6 +817,8 @@ func take_damage(amount: int = 1) -> void:
 	current_health = maxi(0, current_health - amount)
 	if current_health == previous_health:
 		return
+	if current_health > 0:
+		_trigger_haptic(120)
 	add_screenshake(0.4)
 	_regeneration_timer = regeneration_delay
 	_log("damage_taken", {"amount": previous_health - current_health, "health": current_health})
@@ -832,6 +834,8 @@ func heal(amount: int) -> void:
 		return
 	var before_heal := current_health
 	current_health = mini(current_health + amount, max_health)
+	if current_health > before_heal:
+		_trigger_haptic(90)
 	_log("health_restored", {"amount": current_health - before_heal, "health": current_health})
 	_regeneration_timer = regeneration_delay if current_health < max_health else 0.0
 	update_health_ui()
@@ -926,6 +930,7 @@ func _die() -> void:
 	get_node("/root/LevelManager").call("refresh_time_score_hud")
 	is_dead = true
 	_log("player_died", {"health": current_health})
+	_trigger_haptic(240)
 	play_sound_effect(SFX_LOSE, true)
 	freeze_controls()
 	get_tree().paused = true
@@ -1014,6 +1019,7 @@ func _carry_absolute_ritual_relic(relic: Node3D, record_pickup: bool) -> bool:
 	is_carrying_absolute_ritual_relic = true
 	if record_pickup:
 		_log("relic_picked_up", {"object": str(relic.name)})
+		_trigger_haptic(90)
 	is_running = false
 	_update_crouch_state(false)
 	_set_carried_relic_visible(not is_hidden)
@@ -1053,6 +1059,7 @@ func collect_pumpkin() -> void:
 		return
 	pumpkins_collected += 1
 	_log("pumpkin_collected", {"collected": pumpkins_collected, "required": _pumpkin_requirement_for_current_level()})
+	_trigger_haptic(90)
 	if pumpkins_collected == _pumpkin_requirement_for_current_level():
 		_log("mission_completed", {"mission": "pumpkins"})
 	play_sound_effect(SFX_PUMPKIN)
@@ -1285,7 +1292,7 @@ func _update_interaction_prompt() -> void:
 		elif current_level_number >= 3 and pumpkins_collected < _pumpkin_requirement_for_current_level():
 			_interaction_prompt.text = "[BLOQUEADO] Reúne las %d calabazas" % _pumpkin_requirement_for_current_level()
 		else:
-			_interaction_prompt.text = "[Q] Encender ritual"
+			_interaction_prompt.text = "[Q] Encender altar"
 		_interaction_prompt.visible = true
 		return
 	if current_level_number >= 3 and level_builder != null and level_builder.has_method("get_nearby_pumpkin"):
@@ -1347,6 +1354,7 @@ func _try_light_nearby_altar() -> void:
 		return
 	rituals_completed = mini(rituals_completed + 1, total_rituals_required)
 	_log("altar_activated", {"object": str(altar.name), "completed": rituals_completed, "required": total_rituals_required})
+	_trigger_haptic(110)
 	ritual_progress_changed.emit(rituals_completed, total_rituals_required)
 	_update_ritual_counter_ui()
 	noise_emitted.emit(altar.global_position, 1.0)
@@ -1587,6 +1595,7 @@ func escape_cemetery() -> void:
 		return
 	_has_escaped = true
 	_log("level_completed", {"seconds_left": int(get_node("/root/LevelManager").get("seconds_left"))})
+	_trigger_haptic(240)
 	_level_score_seconds = int(get_node("/root/LevelManager").get("seconds_left"))
 	_level_score_points = _level_score_seconds
 	get_node("/root/GameManager").add_level_score(_level_score_points)
@@ -1970,6 +1979,7 @@ func collect_item(item_name: String, item_id: String = "") -> void:
 	if not item_id.is_empty() and not collected_item_ids.has(item_id):
 		collected_item_ids.append(item_id)
 	_log("item_collected", {"item": item_name, "collected": items_collected})
+	_trigger_haptic(90)
 	item_collected.emit(item_name, items_collected, total_items_needed)
 	_persist_campaign_level_progress()
 
@@ -2104,10 +2114,13 @@ func _bind_authored_nodes(node: Node) -> void:
 		_bind_authored_nodes(child)
 
 
+func _trigger_haptic(duration_ms: int) -> void:
+	var controls := get_node_or_null("/root/ControlSettings")
+	if controls != null:
+		controls.call("haptic", duration_ms)
+
+
 func _log(kind: String, data: Dictionary = {}) -> void:
-	if kind in ["item_collected", "pumpkin_collected", "relic_picked_up"]:
-		var controls := get_node_or_null("/root/ControlSettings")
-		if controls != null: controls.haptic(40)
 	var logger := get_node_or_null("/root/GameplayLog")
 	if logger != null:
 		logger.call("record", kind, data, global_position, current_level_number)

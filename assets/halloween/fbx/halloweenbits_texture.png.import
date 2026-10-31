@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bomqb4l70mgtw"
 path.s3tc="res://.godot/imported/halloweenbits_texture.png-423a83d9d706e85bdc49cece188d0595.s3tc.ctex"
+path.etc2="res://.godot/imported/halloweenbits_texture.png-423a83d9d706e85bdc49cece188d0595.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/halloween/fbx/halloweenbits_texture.png"
-dest_files=["res://.godot/imported/halloweenbits_texture.png-423a83d9d706e85bdc49cece188d0595.s3tc.ctex"]
+dest_files=["res://.godot/imported/halloweenbits_texture.png-423a83d9d706e85bdc49cece188d0595.s3tc.ctex", "res://.godot/imported/halloweenbits_texture.png-423a83d9d706e85bdc49cece188d0595.etc2.ctex"]
 
 [params]
 

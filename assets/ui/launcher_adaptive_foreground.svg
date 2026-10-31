@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="432" height="432" viewBox="0 0 432 432">
+  <rect width="432" height="432" fill="none"/>
+  <rect x="132" y="132" width="168" height="168" fill="none" stroke="#cfbb7d" stroke-width="8"/>
+  <g fill="#cfbb7d">
+    <path fill-rule="evenodd" d="M165 150h48c29 0 46 15 46 40 0 23-12 38-33 44l43 50h-29l-37-47h-16v47h-22V150zm22 24v40h23c17 0 26-6 26-20 0-13-9-20-26-20h-23z"/>
+    <path d="M151 150h27v12h-27zm0 122h27v12h-27z"/>
+  </g>
+</svg>

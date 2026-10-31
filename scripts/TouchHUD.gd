@@ -8,7 +8,6 @@ extends CanvasLayer
 @onready var pause_button: TouchScreenButton = $Pause
 @onready var settings_panel: Control = $SettingsPanel
 var player: Node
-var last_health: int = 0
 var _settings_paused_before: bool = false
 var _previous_visible: bool = false
 var _safe_rect := Rect2()
@@ -19,18 +18,19 @@ func _ready() -> void:
 	process_priority = 100
 	get_node("/root/ControlSettings").changed.connect(_apply_settings)
 	get_viewport().size_changed.connect(_layout)
-	$SettingsPanel/Card/Margin/Fields/Close.pressed.connect(close_settings)
-	$SettingsPanel/Card/Margin/Fields/ResetDefaults.pressed.connect(_reset_settings)
-	var fields := $SettingsPanel/Card/Margin/Fields
+	$SettingsPanel/Card/Margin/Scroll/Fields/Close.pressed.connect(close_settings)
+	$SettingsPanel/Card/Margin/Scroll/Fields/ResetDefaults.pressed.connect(_reset_settings)
+	$SettingsPanel/Card/Margin/Scroll/Fields/VibrationRow/TestVibration.pressed.connect(_test_vibration)
+	var fields := $SettingsPanel/Card/Margin/Scroll/Fields
 	var config := get_node("/root/ControlSettings")
-	for item in [["Opacity", "opacity"], ["Size", "control_scale"], ["DeadZone", "dead_zone"]]:
+	for item in [["Opacity", "opacity"], ["Size", "control_scale"], ["DeadZone", "dead_zone"], ["LookSensitivity", "look_sensitivity"]]:
 		var slider: Range = fields.get_node(item[0])
 		slider.value = config.get(item[1])
 		slider.value_changed.connect(func(value: float): config.set(item[1], value); config.save())
-	fields.get_node("Vibration").button_pressed = config.vibration
-	fields.get_node("Vibration").toggled.connect(func(value: bool): config.vibration = value; config.save())
+	fields.get_node("VibrationRow/Vibration").button_pressed = config.vibration
+	fields.get_node("VibrationRow/Vibration").toggled.connect(_on_vibration_toggled)
 	fields.get_node("DebugTouch").button_pressed = config.debug_touch
-	fields.get_node("DebugTouch").visible = OS.has_feature("debug")
+	fields.get_node("DebugTouch").visible = OS.has_feature("debug") and _is_desktop_platform()
 	fields.get_node("DebugTouch").toggled.connect(func(value: bool): config.debug_touch = value; config.save())
 	settings_panel.hide()
 	_apply_settings()
@@ -38,14 +38,15 @@ func _ready() -> void:
 func _enabled() -> bool:
 	return get_node("/root/ControlSettings").touch_enabled() or (OS.has_feature("debug") and debug_on_pc)
 
+func _is_desktop_platform() -> bool:
+	return OS.get_name() in ["Windows", "macOS", "Linux", "FreeBSD", "NetBSD", "OpenBSD", "BSD"]
+
 func _process(_delta: float) -> void:
 	var candidate := get_tree().get_first_node_in_group("player")
 	if player != candidate:
 		_restore_layouts()
 		player = candidate
 		if is_instance_valid(player):
-			last_health = int(player.current_health)
-			player.health_changed.connect(_health_changed)
 			_layout()
 	var playable: bool = is_instance_valid(player) and not get_tree().paused and not player.controls_frozen and not player.is_dead
 	controls.visible = _enabled() and playable
@@ -75,13 +76,17 @@ func _process(_delta: float) -> void:
 		interaction.queue_redraw()
 	if player._interaction_prompt != null: player._interaction_prompt.hide()
 
-func _health_changed(health: int, _maximum: int) -> void:
-	if health < last_health: trigger_haptic(70)
-	elif health > last_health: trigger_haptic(40)
-	last_health = health
+func _on_vibration_toggled(enabled: bool) -> void:
+	var config := get_node("/root/ControlSettings")
+	config.vibration = enabled
+	config.save()
 
-func trigger_haptic(ms: int = 50) -> void:
-	get_node("/root/ControlSettings").haptic(ms)
+func _test_vibration() -> void:
+	var config := get_node("/root/ControlSettings")
+	config.vibration = true
+	$SettingsPanel/Card/Margin/Scroll/Fields/VibrationRow/Vibration.set_pressed_no_signal(true)
+	config.save()
+	config.test_haptic()
 
 func release_controls() -> void:
 	joystick.release_touch()
@@ -91,14 +96,16 @@ func release_controls() -> void:
 func _apply_settings() -> void:
 	var config := get_node("/root/ControlSettings")
 	controls.modulate.a = config.opacity
-	var fields := $SettingsPanel/Card/Margin/Fields
+	var fields := $SettingsPanel/Card/Margin/Scroll/Fields
 	fields.get_node("OpacityLabel").text = "Opacidad: " + str(roundi(config.opacity * 100)) + "%"
 	fields.get_node("SizeLabel").text = "Tamaño de controles: " + str(roundi(config.control_scale * 100)) + "%"
 	fields.get_node("DeadZoneLabel").text = "Zona muerta del joystick: " + String.num(float(config.dead_zone), 2)
+	fields.get_node("LookSensitivityLabel").text = "Velocidad de giro táctil: " + str(roundi(config.look_sensitivity * 100.0)) + "%"
 	fields.get_node("Opacity").set_value_no_signal(config.opacity)
 	fields.get_node("Size").set_value_no_signal(config.control_scale)
 	fields.get_node("DeadZone").set_value_no_signal(config.dead_zone)
-	fields.get_node("Vibration").button_pressed = config.vibration
+	fields.get_node("LookSensitivity").set_value_no_signal(config.look_sensitivity)
+	fields.get_node("VibrationRow/Vibration").button_pressed = config.vibration
 	fields.get_node("DebugTouch").button_pressed = config.debug_touch
 	joystick.dead_zone = config.dead_zone
 	release_controls()

@@ -4,15 +4,16 @@ importer="texture"
 type="CompressedTexture2D"
 uid="uid://bjna8lepo0rvl"
 path.s3tc="res://.godot/imported/skeleton_texture.png-ec8a677dff4d6a10185b92f9d2bda836.s3tc.ctex"
+path.etc2="res://.godot/imported/skeleton_texture.png-ec8a677dff4d6a10185b92f9d2bda836.etc2.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc"],
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
 }
 
 [deps]
 
 source_file="res://assets/skeletons_extra/fbx/skeleton_texture.png"
-dest_files=["res://.godot/imported/skeleton_texture.png-ec8a677dff4d6a10185b92f9d2bda836.s3tc.ctex"]
+dest_files=["res://.godot/imported/skeleton_texture.png-ec8a677dff4d6a10185b92f9d2bda836.s3tc.ctex", "res://.godot/imported/skeleton_texture.png-ec8a677dff4d6a10185b92f9d2bda836.etc2.ctex"]
 
 [params]
 
